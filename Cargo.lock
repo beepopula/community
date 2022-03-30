@@ -230,6 +230,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "community"
+version = "0.1.0"
+dependencies = [
+ "base64 0.13.0",
+ "js-sys",
+ "near-sdk",
+ "sha2",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -781,17 +792,6 @@ name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
-
-[[package]]
-name = "popula"
-version = "0.1.0"
-dependencies = [
- "base64 0.13.0",
- "js-sys",
- "near-sdk",
- "sha2",
- "wasm-bindgen",
-]
 
 [[package]]
 name = "ppv-lite86"
