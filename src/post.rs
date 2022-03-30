@@ -44,9 +44,9 @@ impl Community {
         hash_str
     }
 
-    pub fn add_encrypt_post(&mut self, encrypt_info: String, sign: String) -> String {
+    pub fn add_encrypt_post(&mut self, encrypt_info: String, sign: Base58CryptoHash) -> String {
         let hash = env::sha256(&encrypt_info.clone().into_bytes());
-        let sign: Vec<u8> = bs58::decode(sign).into_vec().unwrap();
+        let sign: Vec<u8> = sign.try_to_vec().unwrap();
         let pk: Vec<u8> = bs58::decode(self.public_key.clone()).into_vec().unwrap();
         verify(hash.clone(), sign.into(), pk.into());
 
