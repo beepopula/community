@@ -10,20 +10,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 near-sdk = "4.0.0-pre.7"
 
-[dependencies.base64]
-version = "0.13"
-
-[dependencies.js-sys]
-version = "0.3"
-optional = true
-
-[dependencies.sha2]
-version = "0.9"
-
-[dependencies.wasm-bindgen]
-version = "0.2"
-optional = true
-
 [profile.release]
 codegen-units = 1
 # Tell `rustc` to optimize for small code size.

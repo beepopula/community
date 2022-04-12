@@ -55,10 +55,9 @@ fn blocks_for_bits(bits: u32) -> u32 {
 }
 impl BitVec {
 
-    pub fn from_elem(nbits: u32) -> Self {
-        let nblocks = blocks_for_bits(nbits);
-        let mut bit_vec = BitVec {
-            storage: UnorderedMap::new(b'v'),
+    pub fn from_elem(nbits: u32, key: String) -> Self {
+        let bit_vec = BitVec {
+            storage: UnorderedMap::new(key.as_bytes()),
             nbits,
         };
         bit_vec

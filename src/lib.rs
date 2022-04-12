@@ -29,7 +29,7 @@ pub struct Community {
     post_bloom_filter: Bloom,
     encrypt_post_bloom_filter: Bloom,
     access: Option<Access>,
-    members: UnorderedMap<AccountId, Member>
+    members: UnorderedMap<AccountId, Member>,
 }
 
 #[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
@@ -46,8 +46,8 @@ impl Community {
         Self {
             owner_id: owner_id,
             public_key: public_key,
-            post_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1),
-            encrypt_post_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1),
+            post_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "public".to_string()),
+            encrypt_post_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "encrypt".to_string()),
             access: None,
             members: UnorderedMap::new(b'm')
         }
