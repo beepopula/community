@@ -26,5 +26,5 @@ pub extern "C" fn upgrade() {
     env::setup_panic_hook();
     assert!(get_parent_contract_id() == env::predecessor_account_id(), "contract's parent only");
     let input = env::input().unwrap();
-    Promise::new(env::predecessor_account_id()).deploy_contract(input);
+    Promise::new(env::current_account_id()).deploy_contract(input);
 }
