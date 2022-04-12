@@ -1,5 +1,7 @@
 
 
+use std::convert::TryFrom;
+
 use near_sdk::{Balance, StorageUsage, Promise, log};
 
 use crate::*;
@@ -39,4 +41,11 @@ pub(crate) fn check_args(text: Option<String>, imgs: Option<Vec<String>>, video:
 
 pub(crate) fn check_encrypt_args(text: Option<String>, imgs: Option<String>, video: Option<String>, audio: Option<String>) {
     assert!(text.is_some() || imgs.is_some() || video.is_some() || audio.is_some(), "at least one field");
+}
+
+pub(crate) fn get_parent_contract_id() -> AccountId {
+    let current_id = env::current_account_id().to_string();
+    let index = current_id.find('.').unwrap();
+    let parent_id = current_id[index + 1..].to_string();
+    AccountId::try_from(parent_id).unwrap()
 }

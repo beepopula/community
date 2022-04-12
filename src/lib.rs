@@ -17,7 +17,7 @@ pub mod bloom_filter;
 pub mod access;
 pub mod post;
 pub mod resolver;
-
+pub mod owner;
 
 
 

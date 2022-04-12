@@ -1,7 +1,8 @@
 use crate::*;
+use utils::get_parent_contract_id;
 
 #[near_bindgen]
-impl Popula {
+impl Community {
     pub fn get_public_key(&self) -> String {
         self.public_key.clone()
     }
@@ -18,4 +19,12 @@ impl Popula {
             None => self.access = Some(Access::new(conditions, relationship))
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn upgrade() {
+    env::setup_panic_hook();
+    assert!(get_parent_contract_id() == env::predecessor_account_id(), "contract's parent only");
+    let input = env::input().unwrap();
+    Promise::new(env::predecessor_account_id()).deploy_contract(input);
 }
