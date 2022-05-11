@@ -89,9 +89,10 @@ impl BitVec {
         }
         let w = i / u32::BITS;
         let b = i % u32::BITS;
-        self.storage.get(&w).map(|block|
-            (block & ((1 as u32) << b)) != 0
-        )
+        match self.storage.get(&w) {
+            Some(block) => Some((block & ((1 as u32) << b)) != 0),
+            None => Some(false)
+        }
     }
 
     /// Sets the value of a bit at an index `i`.

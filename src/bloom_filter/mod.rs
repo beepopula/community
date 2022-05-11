@@ -104,7 +104,7 @@ impl Bloom {
         let mut hashes = [0u64, 0u64];
         let mut found = true;
         for k_i in 0..self.k_num {
-            let bit_offset = (self.bloom_hash(&mut hashes, item, k_i) % self.bitmap_bits as u64);
+            let bit_offset = self.bloom_hash(&mut hashes, item, k_i) % self.bitmap_bits as u64;
             if self.bit_vec.get(bit_offset as u32).unwrap() == false {
                 found = false;
                 self.bit_vec.set(bit_offset as u32, true);

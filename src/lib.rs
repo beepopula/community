@@ -65,6 +65,11 @@ impl Community {
         }
         refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0)
     }
+
+    #[payable]
+    pub fn quit(&mut self) {
+        self.members.remove(&env::predecessor_account_id());
+    }
     
 }
 
