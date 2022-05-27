@@ -41,7 +41,7 @@ impl Community {
         let args = args.clone() + &bs58::encode(env::random_seed()).into_string();
         let hash = env::sha256(&args.clone().into_bytes());
         let hash: CryptoHash = hash[..].try_into().unwrap();
-        self.post_bloom_filter.set(&WrappedHash::from(hash));
+        self.public_bloom_filter.set(&WrappedHash::from(hash), true);
         let hash = Base58CryptoHash::from(hash);
         hash
     }
@@ -63,7 +63,7 @@ impl Community {
         let encrypt_info = encrypt_args.clone() + &bs58::encode(env::random_seed()).into_string();
         let hash = env::sha256(&encrypt_info.clone().into_bytes());
         let hash: CryptoHash = hash[..].try_into().unwrap();
-        self.encrypt_post_bloom_filter.set(&WrappedHash::from(hash));
+        self.encryption_bloom_filter.set(&WrappedHash::from(hash), true);
         let hash = Base58CryptoHash::from(hash);
         hash
     }
@@ -71,18 +71,18 @@ impl Community {
     pub fn like(&mut self, target_hash: Base58CryptoHash) {
         let target_hash = target_hash.try_to_vec().unwrap();
         let target_hash:[u8;32] = target_hash[..].try_into().unwrap();
-        assert!(self.post_bloom_filter.check(&WrappedHash::from(target_hash)) || self.encrypt_post_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
+        assert!(self.public_bloom_filter.check(&WrappedHash::from(target_hash)) || self.encryption_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
     }
 
     pub fn unlike(&mut self, target_hash: Base58CryptoHash) {
         let target_hash = target_hash.try_to_vec().unwrap();
         let target_hash:[u8;32] = target_hash[..].try_into().unwrap();
-        assert!(self.post_bloom_filter.check(&WrappedHash::from(target_hash)) || self.encrypt_post_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
+        assert!(self.public_bloom_filter.check(&WrappedHash::from(target_hash)) || self.encryption_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
     }
 
     pub fn add_comment(&mut self, args: String, target_hash: Base58CryptoHash) -> Base58CryptoHash {
         let target_hash = CryptoHash::from(target_hash);
-        assert!(self.post_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
+        assert!(self.public_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
 
         let args_obj: Args = serde_json::from_str(&args).unwrap();
         check_args(args_obj.text, args_obj.imgs, args_obj.video, args_obj.audio);
@@ -90,14 +90,14 @@ impl Community {
         let args = args.clone() + &env::block_height().to_string();
         let hash = env::sha256(&args.clone().into_bytes());
         let hash: CryptoHash = hash[..].try_into().unwrap();
-        self.post_bloom_filter.set(&WrappedHash::from(hash));
+        self.public_bloom_filter.set(&WrappedHash::from(hash), true);
         let hash = Base58CryptoHash::from(hash);
         hash
     }
 
     pub fn add_encrypt_comment(&mut self, encrypt_args: String, text_sign: String, contract_id_sign: String, target_hash: Base58CryptoHash) -> Base58CryptoHash {
         let target_hash = CryptoHash::from(target_hash);
-        assert!(self.encrypt_post_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
+        assert!(self.encryption_bloom_filter.check(&WrappedHash::from(target_hash)), "content not found");
 
         let pk: Vec<u8> = bs58::decode(self.public_key.clone()).into_vec().unwrap();
         
@@ -115,7 +115,7 @@ impl Community {
         let encrypt_info = encrypt_args.clone() + &env::block_height().to_string();
         let hash = env::sha256(&encrypt_info.clone().into_bytes());
         let hash: CryptoHash = hash[..].try_into().unwrap();
-        self.encrypt_post_bloom_filter.set(&WrappedHash::from(hash));
+        self.encryption_bloom_filter.set(&WrappedHash::from(hash), true);
         let hash = Base58CryptoHash::from(hash);
         hash
 

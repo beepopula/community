@@ -74,12 +74,12 @@ impl Bloom {
     }
 
     /// Record the presence of an item.
-    pub fn set(&mut self, item: &WrappedHash)
+    pub fn set(&mut self, item: &WrappedHash, value: bool)
     {
         let mut hashes = [0u64, 0u64];
         for k_i in 0..self.k_num {
             let bit_offset = (self.bloom_hash(&mut hashes, item, k_i) % self.bitmap_bits as u64) as u32;
-            self.bit_vec.set(bit_offset, true);
+            self.bit_vec.set(bit_offset, value);
         }
     }
 
