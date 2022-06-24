@@ -49,3 +49,27 @@ pub(crate) fn get_parent_contract_id() -> AccountId {
     let parent_id = current_id[index + 1..].to_string();
     AccountId::try_from(parent_id).unwrap()
 }
+
+
+pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, bloom_filter: &Bloom) -> Option<String> {
+    let mut hash_prefix = "".to_string();
+    for (_, hierarchy) in hierarchies.iter().enumerate() {
+        let hierarchy_hash = env::sha256(&(hash_prefix + &hierarchy.account_id.to_string() + &String::from(&hierarchy.target_hash)).into_bytes());
+        let hierarchy_hash: [u8;32] = hierarchy_hash[..].try_into().unwrap();
+        if !bloom_filter.check(&WrappedHash::from(hierarchy_hash)) {
+            return None
+        }
+        hash_prefix = String::from(&Base58CryptoHash::from(hierarchy_hash));
+    }
+    Some(hash_prefix)
+}
+
+pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: String, bloom_filter: &mut Bloom) -> Base58CryptoHash {
+    let args = args.clone() + &bs58::encode(env::random_seed()).into_string();
+    let target_hash = env::sha256(&args.clone().into_bytes());
+    let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
+    let hash = env::sha256(&(hash_prefix + &account_id.to_string() + &String::from(&Base58CryptoHash::from(target_hash))).into_bytes());
+    let hash: CryptoHash = hash[..].try_into().unwrap();
+    bloom_filter.set(&WrappedHash::from(hash), true);
+    Base58CryptoHash::from(target_hash)
+}

@@ -37,7 +37,7 @@ impl Community {
             }
         }
         if success {
-            self.members.insert(&account_id, &Member(1));
+            self.drip.join(account_id);
         }
 
         refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0)

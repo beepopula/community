@@ -99,7 +99,7 @@ impl Bloom {
 
     /// Record the presence of an item in the set,
     /// and return the previous state of this item.
-    pub fn check_and_set(&mut self, item: &WrappedHash) -> bool
+    pub fn check_and_set(&mut self, item: &WrappedHash, value: bool) -> bool
     {
         let mut hashes = [0u64, 0u64];
         let mut found = true;
@@ -107,7 +107,7 @@ impl Bloom {
             let bit_offset = self.bloom_hash(&mut hashes, item, k_i) % self.bitmap_bits as u64;
             if self.bit_vec.get(bit_offset as u32).unwrap() == false {
                 found = false;
-                self.bit_vec.set(bit_offset as u32, true);
+                self.bit_vec.set(bit_offset as u32, value);
             }
         }
         found
