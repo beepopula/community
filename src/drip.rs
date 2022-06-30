@@ -30,22 +30,18 @@ impl Drip {
             if hierarchy.account_id == account_id {
                 continue
             }
-            let mut account = match self.accounts.get(&hierarchy.account_id) {
-                Some(v) => v,
-                None => continue
-            };
-            let key = "content".to_string() + &(i + MAX_LEVEL + len - 1).to_string();
-            set_drip(key, &mut account);
-            self.accounts.insert(&hierarchy.account_id, &account);
+            if let Some(mut account) = self.accounts.get(&hierarchy.account_id) {
+                let key = "content".to_string() + &(i + MAX_LEVEL + len - 1).to_string();
+                set_drip(key, &mut account);
+                self.accounts.insert(&hierarchy.account_id, &account);
+            }  
         }
 
-        let mut sender = match self.accounts.get(&account_id) {
-            Some(v) => v,
-            None => return
-        };
-        let key = "content".to_string() + &(len).to_string();
-        set_drip(key, &mut sender);
-        self.accounts.insert(&account_id, &sender);
+        if let Some(mut sender) = self.accounts.get(&account_id) {
+            let key = "content".to_string() + &(len).to_string();
+            set_drip(key, &mut sender);
+            self.accounts.insert(&account_id, &sender);
+        }
     }
 
     pub fn set_like_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
@@ -53,13 +49,18 @@ impl Drip {
         if content_account_id == account_id {
             return
         }
-        let key = "like".to_string();
-        let mut content_account = match self.accounts.get(&content_account_id) {
-            Some(v) => v,
-            None => return
-        };
-        set_drip(key, &mut content_account);
-        self.accounts.insert(&content_account_id, &content_account);
+        
+        if let Some(mut content_account) = self.accounts.get(&content_account_id) {
+            let key = "be_liked".to_string();
+            set_drip(key, &mut content_account);
+            self.accounts.insert(&content_account_id, &content_account);
+        }
+        
+        if let Some(mut account) = self.accounts.get(&account_id) {
+            let key = "like".to_string();
+            set_drip(key, &mut account);
+            self.accounts.insert(&account_id, &account);
+        }
     }
 
     pub fn set_report_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
@@ -67,34 +68,54 @@ impl Drip {
         if content_account_id == account_id {
             return
         }
-        let key = "report".to_string();
-        let mut account = match self.accounts.get(&account_id) {
-            Some(v) => v,
-            None => return
-        };
-        set_drip(key, &mut account);
-        self.accounts.insert(&account_id, &account);
+
+        if let Some(mut account) = self.accounts.get(&account_id) {
+            let key = "report".to_string();
+            set_drip(key, &mut account);
+            self.accounts.insert(&account_id, &account);
+        }
     }
 
     pub fn set_report_confirm_drip(&mut self, account_id: AccountId) {
-        let key = "report_confirm".to_string();
-        let mut account = match self.accounts.get(&account_id) {
-            Some(v) => v,
-            None => return
-        };
-        set_drip(key, &mut account);
-        self.accounts.insert(&account_id, &account);
+        if let Some(mut account) = self.accounts.get(&account_id) {
+            let key = "report_confirm".to_string();
+            set_drip(key, &mut account);
+            self.accounts.insert(&account_id, &account);
+        }
+        
     }
 
-    pub fn set_share_drip(&mut self, account_id: AccountId) {
-        let key = "share".to_string();
-        let mut account = match self.accounts.get(&account_id) {
-            Some(v) => v,
-            None => return
-        };
-        set_drip(key, &mut account);
-        self.accounts.insert(&account_id, &account);
+    pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
+        let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
+        if content_account_id == account_id {
+            return
+        }
+
+        if let Some(mut content_account) = self.accounts.get(&content_account_id) {
+            let key = "be_shared".to_string();
+            set_drip(key, &mut content_account);
+            self.accounts.insert(&content_account_id, &content_account);
+        }
+        
+        if let Some(mut account) = self.accounts.get(&account_id) {
+            let key = "share".to_string();
+            set_drip(key, &mut account);
+            self.accounts.insert(&account_id, &account);
+        }
+        
     }
+
+    pub fn set_share_view_drip(&mut self, account_id: AccountId) {
+        if let Some(mut account) = self.accounts.get(&account_id) {
+            let key = "share_view".to_string();
+            set_drip(key, &mut account);
+            self.accounts.insert(&account_id, &account);
+        }
+        
+    }
+
+
+
 
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> HashMap<String, U128> {
         let mut account = match self.accounts.get(&account_id) {
