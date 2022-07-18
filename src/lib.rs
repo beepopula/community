@@ -5,6 +5,7 @@ use std::convert::TryInto;
 
 use access::{Access, Condition, Relationship};
 use bloom_filter::{Bloom, WrappedHash};
+use events::Event;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
@@ -28,6 +29,7 @@ pub mod owner;
 pub mod moderator;
 pub mod drip;
 pub mod view;
+pub mod events;
 
 
 
@@ -94,8 +96,12 @@ impl Community {
     pub fn add_item(&mut self, args: String) -> Base58CryptoHash {
         let sender_id = env::signer_account_id();
         let args = sender_id.to_string() + &args.clone();
-        let target_hash = set_content(args, sender_id.clone(), "".to_string(), &mut self.public_bloom_filter);
-        self.drip.set_content_drip(Vec::new(), sender_id);
+        let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), &mut self.public_bloom_filter);
+        self.drip.set_content_drip(Vec::new(), sender_id.clone());
+        Event::log_add_content(args, vec![Hierarchy { 
+            target_hash, 
+            account_id: sender_id
+        }]);
         target_hash
     }
 

@@ -64,9 +64,13 @@ impl Community {
         assert!(hierarchies.len() < MAX_LEVEL, "error");
 
         let hash_prefix = get_content_hash(hierarchies.clone(), &self.public_bloom_filter).expect("content not found");
-        let target_hash = set_content(args, sender_id.clone(), hash_prefix, &mut self.public_bloom_filter);
+        let target_hash = set_content(args.clone(), sender_id.clone(), hash_prefix, &mut self.public_bloom_filter);
 
-        self.drip.set_content_drip(hierarchies, sender_id);
+        self.drip.set_content_drip(hierarchies.clone(), sender_id.clone());
+        Event::log_add_content(args, [hierarchies, vec![Hierarchy { 
+            target_hash, 
+            account_id: sender_id
+        }]].concat());
         target_hash
     }
 
@@ -85,9 +89,13 @@ impl Community {
 
         let hash_prefix = get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found");
 
-        let target_hash = set_content(encrypt_args, sender_id.clone(), hash_prefix, &mut self.encryption_bloom_filter);
+        let target_hash = set_content(encrypt_args.clone(), sender_id.clone(), hash_prefix, &mut self.encryption_bloom_filter);
         
-        self.drip.set_content_drip(hierarchies, sender_id);
+        self.drip.set_content_drip(hierarchies.clone(), sender_id.clone());
+        Event::log_add_content(encrypt_args, [hierarchies, vec![Hierarchy { 
+            target_hash, 
+            account_id: sender_id
+        }]].concat());
         target_hash
     }
 
@@ -101,20 +109,22 @@ impl Community {
         let hash: CryptoHash = hash[..].try_into().unwrap();
         let exist = self.relationship_bloom_filter.check_and_set(&WrappedHash::from(hash), true);
         if !exist {
-            self.drip.set_like_drip(hierarchies, sender_id);
+            self.drip.set_like_drip(hierarchies.clone(), sender_id);
         }
+        Event::log_like_content(hierarchies);
     }
 
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
             Some(v) => v,
-            None => get_content_hash(hierarchies, &self.encryption_bloom_filter).expect("content not found")
+            None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
         };
 
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         let hash: CryptoHash = hash[..].try_into().unwrap();
         assert!(self.relationship_bloom_filter.check_and_set(&WrappedHash::from(hash), false), "illegal");
+        Event::log_unlike_content(hierarchies);
     }
 
     #[payable]
@@ -142,12 +152,13 @@ impl Community {
 
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
             Some(v) => v,
-            None => get_content_hash(hierarchies, &self.encryption_bloom_filter).expect("content not found")
+            None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
         };
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap().try_to_vec().unwrap();
         let hierarchy_hash: CryptoHash = hierarchy_hash[..].try_into().unwrap();
         self.public_bloom_filter.set(&WrappedHash::from(hierarchy_hash), false);
         self.encryption_bloom_filter.set(&WrappedHash::from(hierarchy_hash), false);
+        Event::log_del_content(hierarchies);
     }
 
     pub fn share(&mut self, hierarchies: Vec<Hierarchy>) {
