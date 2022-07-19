@@ -47,10 +47,16 @@ pub struct Community {
     drip: Drip
 }
 
-#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug)]
-pub struct Member (u32);
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+pub struct OldCommunity {
+    owner_id: AccountId,
+    public_key: String,
+    public_bloom_filter: Bloom,
+    encryption_bloom_filter: Bloom,
+    access: Option<Access>,
+    members: UnorderedMap<AccountId, u32>,
+}
+
 
 
 const MAX_LEVEL: usize = 3;
@@ -72,6 +78,35 @@ impl Community {
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new()
         }
+    }
+
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+
+        let mut prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
+        // let success = env::storage_remove(b"r");
+        // log!("{:?}", success);
+        assert_eq!(
+            env::predecessor_account_id(),
+            prev.owner_id,
+            "Only owner"
+        );
+
+        prev.members.clear();
+        
+        let this = Community {
+            owner_id: prev.owner_id,
+            public_key: prev.public_key,
+            moderators: UnorderedSet::new(b'm'),
+            public_bloom_filter: prev.public_bloom_filter,
+            encryption_bloom_filter: prev.encryption_bloom_filter,
+            access: prev.access,
+            relationship_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "relationship".to_string()),
+            reports: UnorderedMap::new(b'r'),
+            drip: Drip::new()
+        };
+
+        this
     }
     
     #[payable]

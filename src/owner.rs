@@ -14,10 +14,18 @@ impl Community {
     }
 
     pub fn set_access(&mut self, conditions: Vec<Condition>, relationship: Relationship) {
+        let sender = env::predecessor_account_id();
+        assert!(sender == self.owner_id, "owner only");
         match &mut self.access.clone() {
             Some(v) => v.set(conditions, relationship),
             None => self.access = Some(Access::new(conditions, relationship))
         }
+    }
+
+    pub fn set_owner(&mut self, account_id: AccountId) {
+        let sender = env::predecessor_account_id();
+        assert!(sender == self.owner_id, "owner only");
+        self.owner_id = account_id;
     }
 }
 
