@@ -67,8 +67,8 @@ impl Community {
 
     #[init]
     pub fn new(owner_id: AccountId, public_key: String) -> Self {
-        Self {
-            owner_id: owner_id,
+        let mut this = Self {
+            owner_id: owner_id.clone(),
             public_key: public_key,
             moderators: UnorderedSet::new(b'm'),
             public_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "public".to_string()),
@@ -77,7 +77,9 @@ impl Community {
             access: None,
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new()
-        }
+        };
+        this.drip.join(owner_id);
+        this
     }
 
     #[init(ignore_state)]
@@ -105,7 +107,6 @@ impl Community {
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new()
         };
-
         this
     }
     
