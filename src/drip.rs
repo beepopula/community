@@ -85,25 +85,25 @@ impl Drip {
         
     }
 
-    pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
-        let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
-        if content_account_id == account_id {
-            return
-        }
+    // pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
+    //     let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
+    //     if content_account_id == account_id {
+    //         return
+    //     }
 
-        if let Some(mut content_account) = self.accounts.get(&content_account_id) {
-            let key = "be_shared".to_string();
-            set_drip(key, &mut content_account);
-            self.accounts.insert(&content_account_id, &content_account);
-        }
+    //     if let Some(mut content_account) = self.accounts.get(&content_account_id) {
+    //         let key = "be_shared".to_string();
+    //         set_drip(key, &mut content_account);
+    //         self.accounts.insert(&content_account_id, &content_account);
+    //     }
         
-        if let Some(mut account) = self.accounts.get(&account_id) {
-            let key = "share".to_string();
-            set_drip(key, &mut account);
-            self.accounts.insert(&account_id, &account);
-        }
+    //     if let Some(mut account) = self.accounts.get(&account_id) {
+    //         let key = "share".to_string();
+    //         set_drip(key, &mut account);
+    //         self.accounts.insert(&account_id, &account);
+    //     }
         
-    }
+    // }
 
     pub fn set_share_view_drip(&mut self, account_id: AccountId) {
         if let Some(mut account) = self.accounts.get(&account_id) {

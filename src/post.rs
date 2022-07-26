@@ -161,19 +161,19 @@ impl Community {
         Event::log_del_content(hierarchies);
     }
 
-    pub fn share(&mut self, hierarchies: Vec<Hierarchy>) {
-        let sender_id = env::predecessor_account_id();
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
-        };
-        let share_hash = env::sha256(&(sender_id.to_string() + "shared" + &hierarchy_hash).into_bytes());
-        let share_hash: CryptoHash = share_hash[..].try_into().unwrap();
-        let exist = self.relationship_bloom_filter.check_and_set(&WrappedHash::from(share_hash), true);
-        if !exist {
-            self.drip.set_share_drip(hierarchies, sender_id)
-        }
-    }
+    // pub fn share(&mut self, hierarchies: Vec<Hierarchy>) {
+    //     let sender_id = env::predecessor_account_id();
+    //     let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
+    //         Some(v) => v,
+    //         None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
+    //     };
+    //     let share_hash = env::sha256(&(sender_id.to_string() + "shared" + &hierarchy_hash).into_bytes());
+    //     let share_hash: CryptoHash = share_hash[..].try_into().unwrap();
+    //     let exist = self.relationship_bloom_filter.check_and_set(&WrappedHash::from(share_hash), true);
+    //     if !exist {
+    //         self.drip.set_share_drip(hierarchies, sender_id)
+    //     }
+    // }
 
     pub fn share_view(&mut self, hierarchies: Vec<Hierarchy>, inviter_id: AccountId) {
         let sender_id = env::predecessor_account_id();
