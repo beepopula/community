@@ -182,12 +182,8 @@ impl Community {
             Some(v) => v,
             None => get_content_hash(hierarchies, &self.encryption_bloom_filter).expect("content not found")
         };
-        let share_hash = env::sha256(&(sender_id.to_string() + "shared" + &hierarchy_hash).into_bytes());
-        let share_hash: CryptoHash = share_hash[..].try_into().unwrap();
-        assert!(self.relationship_bloom_filter.check(&WrappedHash::from(share_hash)), "not shared");
 
-        let share_hash = String::from(&Base58CryptoHash::from(share_hash));
-        let view_hash = env::sha256(&(sender_id.to_string() + "viewed" + &share_hash).into_bytes());
+        let view_hash = env::sha256(&(sender_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
         let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
         let exist = self.relationship_bloom_filter.check_and_set(&WrappedHash::from(view_hash), true);
         if !exist {
