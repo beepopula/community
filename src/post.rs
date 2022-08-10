@@ -56,8 +56,23 @@ pub struct Report {
 
 #[near_bindgen]
 impl Community {
+
+    pub fn add_item(&mut self, args: String) -> Base58CryptoHash {
+        let sender_id = env::signer_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent), "not allowed");
+        let args = sender_id.to_string() + &args.clone();
+        let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), &mut self.public_bloom_filter);
+        self.drip.set_content_drip(Vec::new(), sender_id.clone());
+        Event::log_add_content(args, vec![Hierarchy { 
+            target_hash, 
+            account_id: sender_id
+        }]);
+        target_hash
+    }
+
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>) -> Base58CryptoHash {
         let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent), "not allowed");
         let args_obj: Args = serde_json::from_str(&args).unwrap();
         check_args(args_obj.text, args_obj.imgs, args_obj.video, args_obj.audio);
 
@@ -76,6 +91,7 @@ impl Community {
 
     pub fn add_encrypt_content(&mut self, encrypt_args: String, access: Option<Access>, hierarchies: Vec<Hierarchy>, nonce: String, sign: String) -> Base58CryptoHash {
         let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent), "not allowed");
         let pk: Vec<u8> = bs58::decode(self.public_key.clone()).into_vec().unwrap();
 
         let hash = env::sha256(&(encrypt_args.clone() + &nonce).into_bytes());
@@ -101,6 +117,7 @@ impl Community {
 
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::Like), "not allowed");
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
@@ -116,6 +133,7 @@ impl Community {
 
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::Unlike), "not allowed");
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
@@ -132,6 +150,7 @@ impl Community {
         assert!(5_000_000_000_000_000_000_000_000 <= env::attached_deposit(), "not enough deposit");
 
         let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::Report), "not allowed");
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
@@ -146,8 +165,37 @@ impl Community {
         self.reports.insert(&sender_id, &account);
     }
 
+    pub fn report_confirm(&mut self, account_id: AccountId, hierarchies: Vec<Hierarchy>, del: bool) {
+        let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
+        assert!(account_id != sender_id, "signer_id = account_id");
+
+        let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
+            Some(v) => v,
+            None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
+        };
+        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
+
+        let mut account = self.reports.get(&account_id).unwrap();
+        let mut report = account.get(&hierarchy_hash).unwrap();
+        assert!(report.del.is_none(), "resolved");
+        report.del = Some(del); 
+        account.insert(&hierarchy_hash, &report);
+        self.reports.insert(&account_id, &account);
+
+        if del == true {
+            let hierarchy_hash = CryptoHash::from(hierarchy_hash);
+            self.public_bloom_filter.set(&WrappedHash::from(hierarchy_hash), false);
+            self.encryption_bloom_filter.set(&WrappedHash::from(hierarchy_hash), false);
+
+            self.drip.set_report_drip(hierarchies, account_id);
+            self.drip.set_report_confirm_drip(sender_id);
+        }
+    }
+
     pub fn del_content(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {

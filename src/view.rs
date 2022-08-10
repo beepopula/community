@@ -12,7 +12,7 @@ impl Community {
         self.relationship_bloom_filter.check(&WrappedHash::from(target_hash))
     }
 
-    pub fn get_drip(&self, account_id: AccountId) -> HashMap<String, U128> {
+    pub fn get_drip(&self, account_id: AccountId) -> U128 {
         self.drip.get_drip(account_id)
     }
 

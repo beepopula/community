@@ -10,13 +10,15 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self};
-use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash};
+use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::Drip;
 use post::Report;
+use role::Role;
 use utils::{check_args, verify, check_encrypt_args, refund_extra_storage_deposit, set_content};
 use crate::post::Hierarchy;
 use std::convert::TryFrom;
+use role::Permission;
 
 
 pub mod utils;
@@ -26,10 +28,10 @@ pub mod access;
 pub mod post;
 pub mod resolver;
 pub mod owner;
-pub mod moderator;
 pub mod drip;
 pub mod view;
 pub mod events;
+pub mod role;
 
 
 
@@ -38,13 +40,13 @@ pub mod events;
 pub struct Community {
     owner_id: AccountId,
     public_key: String,
-    moderators: UnorderedSet<AccountId>,
     public_bloom_filter: Bloom,
     encryption_bloom_filter: Bloom,
     relationship_bloom_filter: Bloom,
     access: Option<Access>,
     reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
-    drip: Drip
+    drip: Drip,
+    roles: UnorderedMap<String, Role>
 }
 
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -70,13 +72,13 @@ impl Community {
         let mut this = Self {
             owner_id: owner_id.clone(),
             public_key: public_key,
-            moderators: UnorderedSet::new(b'm'),
             public_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "public".to_string()),
             encryption_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "encrypt".to_string()),
             relationship_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "relationship".to_string()),
             access: None,
             reports: UnorderedMap::new(b'r'),
-            drip: Drip::new()
+            drip: Drip::new(),
+            roles: UnorderedMap::new("roles".as_bytes())
         };
         this.drip.join(owner_id);
         this
@@ -99,13 +101,13 @@ impl Community {
         let this = Community {
             owner_id: prev.owner_id,
             public_key: prev.public_key,
-            moderators: UnorderedSet::new(b'm'),
             public_bloom_filter: prev.public_bloom_filter,
             encryption_bloom_filter: prev.encryption_bloom_filter,
             access: prev.access,
             relationship_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "relationship".to_string()),
             reports: UnorderedMap::new(b'r'),
-            drip: Drip::new()
+            drip: Drip::new(),
+            roles: UnorderedMap::new("roles".as_bytes())
         };
         this
     }
@@ -125,23 +127,14 @@ impl Community {
 
     #[payable]
     pub fn quit(&mut self) {
+        assert_one_yocto();
         let sender_id = env::predecessor_account_id();
         self.drip.quit(sender_id);
     }
 
-    pub fn add_item(&mut self, args: String) -> Base58CryptoHash {
-        let sender_id = env::signer_account_id();
-        let args = sender_id.to_string() + &args.clone();
-        let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), &mut self.public_bloom_filter);
-        self.drip.set_content_drip(Vec::new(), sender_id.clone());
-        Event::log_add_content(args, vec![Hierarchy { 
-            target_hash, 
-            account_id: sender_id
-        }]);
-        target_hash
-    }
-
-    pub fn collect_drip(&mut self) -> HashMap<String, U128> {
+    #[payable]
+    pub fn collect_drip(&mut self) -> U128 {
+        assert_one_yocto();
         let sender_id = env::signer_account_id();
         self.drip.get_and_clear_drip(sender_id)
     }
