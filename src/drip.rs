@@ -3,6 +3,12 @@ use std::collections::HashMap;
 use crate::*;
 use post::Hierarchy;
 
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Debug)]
+pub struct OldDrip {
+    accounts: LookupMap<AccountId, HashMap<String, U128>>,  
+}
+
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Debug)]
@@ -30,11 +36,22 @@ impl Default for DripAccount {
 
 
 impl Drip {
-    pub fn new() -> Self{
-        Drip { 
+    pub fn new() -> Self {
+        let mut this = Self { 
             accounts:  LookupMap::new("drip".as_bytes()),
             map: HashMap::new()
-        }
+        };
+        this.map.insert("content0".into(), 200000000000000000000000);
+        this.map.insert("content1".into(), 200000000000000000000000);
+        this.map.insert("content2".into(), 200000000000000000000000);
+        this.map.insert("content3".into(), 100000000000000000000000);
+        this.map.insert("content4".into(), 40000000000000000000000);
+        this.map.insert("content5".into(), 100000000000000000000000);
+        this.map.insert("like".into(), 200000000000000000000000);
+        this.map.insert("share".into(), 200000000000000000000000);
+        this.map.insert("be_shared".into(), 50000000000000000000000);
+        this.map.insert("be_liked".into(), 50000000000000000000000);
+        this
     }
 
     fn set_drip(&self, key: String, balance: &mut u128) {
@@ -95,33 +112,33 @@ impl Drip {
         self.accounts.insert(&account_id, &account);
     }
 
-    // pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
-    //     let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
-    //     if content_account_id == account_id {
-    //         return
-    //     }
+    pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
+        let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
+        if content_account_id == account_id {
+            return
+        }
 
-    //     let key = "be_shared".to_string();
-    //     let mut content_account = self.accounts.get(&content_account_id).unwrap_or(HashMap::new());
-    //     set_drip(key, &mut content_account);
-    //     self.accounts.insert(&content_account_id, &content_account);
+        let key = "be_shared".to_string();
+        let mut content_account = self.accounts.get(&content_account_id).unwrap_or_default();
+        self.set_drip(key, &mut content_account.balance);
+        self.accounts.insert(&content_account_id, &content_account);
 
-    //     let key = "share".to_string();
-    //     let mut account = self.accounts.get(&account_id).unwrap_or(HashMap::new());
-    //     set_drip(key, &mut account);
-    //     self.accounts.insert(&account_id, &account);
-    // }
-
-    pub fn set_share_view_drip(&mut self, account_id: AccountId) {
-        let key = "share_view".to_string();
-        let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        self.set_drip(key, &mut account.balance);
-        self.accounts.insert(&account_id, &account);
+        let key = "share".to_string();
+        match self.accounts.get(&account_id) {
+            Some(mut account) => {
+                self.set_drip(key, &mut account.balance);
+                self.accounts.insert(&account_id, &account);
+            },
+            None => return
+        }
     }
 
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> U128 {
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        account.balance.into()
+        let balance = account.balance.clone();
+        account.balance = 0;
+        self.accounts.insert(&account_id, &account);
+        balance.into()
     }
 
     pub fn get_drip(&self, account_id: AccountId) -> U128 {

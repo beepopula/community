@@ -228,14 +228,14 @@ impl Community {
         assert!(inviter_id != sender_id, "failed");
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
             Some(v) => v,
-            None => get_content_hash(hierarchies, &self.encryption_bloom_filter).expect("content not found")
+            None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
         };
 
         let view_hash = env::sha256(&(sender_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
         let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
         let exist = self.relationship_bloom_filter.check_and_set(&WrappedHash::from(view_hash), true);
         if !exist {
-            self.drip.set_share_view_drip(inviter_id)
+            self.drip.set_share_drip(hierarchies, inviter_id)
         }
     }
 

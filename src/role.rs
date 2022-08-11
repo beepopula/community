@@ -6,8 +6,21 @@ use near_sdk::json_types::{U128, U64};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, AccountId, Balance};
 
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug)]
+pub enum RoleKindInput {
+    /// Matches everyone, who is not matched by other roles.
+    Everyone,
+    //support NEP141,"near" for near token
+    // Member(AccountId, U128),
+    /// Set of accounts.
+    Group,
+}
+
 #[derive(BorshSerialize, BorshDeserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
+#[derive(Debug)]
 pub enum RoleKind {
     /// Matches everyone, who is not matched by other roles.
     Everyone,
@@ -56,7 +69,7 @@ impl RoleKind {
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
+#[derive(Debug)]
 pub struct Role {
     /// Kind of the role: defines which users this permissions apply.
     pub kind: RoleKind,
@@ -66,7 +79,9 @@ pub struct Role {
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd))]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, PartialOrd)]
 pub enum Permission {
     AddContent,
     DelContent,
@@ -81,8 +96,9 @@ pub enum Permission {
 }
 
 
+#[near_bindgen]
 impl Community {
-    pub fn set_role(&mut self, name: String, kind: Option<RoleKind>, permissions: Option<Vec<Permission>>) {
+    pub fn set_role(&mut self, name: String, kind: Option<RoleKindInput>, permissions: Option<Vec<Permission>>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole), "not allowed");
 
@@ -94,7 +110,23 @@ impl Community {
             }
         };
         if let Some(kind) = kind {
-            role.kind = kind
+            match role.kind {
+                RoleKind::Everyone => {},
+                RoleKind::Group(mut group) => {
+                    match kind {
+                        RoleKindInput::Group=>{group.clear();}
+                        RoleKindInput::Everyone => {}
+                    };
+                }
+            }
+            match kind {
+                RoleKindInput::Everyone => {
+                    role.kind = RoleKind::Everyone
+                },
+                RoleKindInput::Group => {
+                    role.kind = RoleKind::Group(UnorderedSet::new(format!("{}_member", name).as_bytes()))
+                }
+            }
         }
         if let Some(permissions) = permissions {
             for permission in permissions {

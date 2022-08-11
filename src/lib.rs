@@ -1,6 +1,6 @@
 
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 
 use access::{Access, Condition, Relationship};
@@ -14,7 +14,7 @@ use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise,
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::Drip;
 use post::Report;
-use role::Role;
+use role::{Role, RoleKind};
 use utils::{check_args, verify, check_encrypt_args, refund_extra_storage_deposit, set_content};
 use crate::post::Hierarchy;
 use std::convert::TryFrom;
@@ -81,6 +81,16 @@ impl Community {
             roles: UnorderedMap::new("roles".as_bytes())
         };
         this.drip.join(owner_id);
+        let mut permissions = HashSet::new();
+        permissions.insert(Permission::AddContent);
+        permissions.insert(Permission::DelContent);
+        permissions.insert(Permission::Like);
+        permissions.insert(Permission::Unlike);
+        permissions.insert(Permission::Report);
+        this.roles.insert(&"all".to_string(), &Role { 
+            kind: RoleKind::Everyone, 
+            permissions:  permissions
+        });
         this
     }
 
