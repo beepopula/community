@@ -3,7 +3,6 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 
-use access::{Access, Condition, Relationship};
 use bloom_filter::{Bloom, WrappedHash};
 use events::Event;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -12,8 +11,8 @@ use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self};
 use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
-use drip::Drip;
-use post::Report;
+use drip::{Drip, OldDrip};
+use post::{Report, Access};
 use role::{Role, RoleKind};
 use utils::{check_args, verify, check_encrypt_args, refund_extra_storage_deposit, set_content};
 use crate::post::Hierarchy;
@@ -24,9 +23,7 @@ use role::Permission;
 pub mod utils;
 pub mod signature;
 pub mod bloom_filter;
-pub mod access;
 pub mod post;
-pub mod resolver;
 pub mod owner;
 pub mod drip;
 pub mod view;
@@ -53,10 +50,13 @@ pub struct Community {
 pub struct OldCommunity {
     owner_id: AccountId,
     public_key: String,
+    moderators: UnorderedSet<AccountId>,
     public_bloom_filter: Bloom,
     encryption_bloom_filter: Bloom,
+    relationship_bloom_filter: Bloom,
     access: Option<Access>,
-    members: UnorderedMap<AccountId, u32>,
+    reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
+    drip: OldDrip,
 }
 
 
@@ -97,7 +97,7 @@ impl Community {
     #[init(ignore_state)]
     pub fn migrate() -> Self {
 
-        let mut prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
+        let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
         // let success = env::storage_remove(b"r");
         // log!("{:?}", success);
         assert_eq!(
@@ -105,8 +105,6 @@ impl Community {
             prev.owner_id,
             "Only owner"
         );
-
-        prev.members.clear();
         
         let this = Community {
             owner_id: prev.owner_id,
@@ -124,15 +122,10 @@ impl Community {
     
     #[payable]
     pub fn join(&mut self) {
-        let initial_storage_usage = env::storage_usage();
+        //let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        match &mut self.access {
-            Some(v) => v.check_permission(sender_id),
-            None => {
-                self.drip.join(sender_id);
-            }
-        }
-        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0)
+        self.drip.join(sender_id);
+        //refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0)
     }
 
     #[payable]
