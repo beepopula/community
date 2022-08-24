@@ -8,32 +8,22 @@ use post::Hierarchy;
 impl Community {
     pub fn check_follow(&self, followee: AccountId, follower: AccountId) -> bool {
         let target_hash = env::sha256(&(followee.to_string() + "follwed_by" + &follower.to_string()).into_bytes());
-        let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
-        self.relationship_bloom_filter.check(&WrappedHash::from(target_hash))
+        //let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
+        self.relationship_bloom_filter.check(&target_hash)
     }
 
     pub fn get_drip(&self, account_id: AccountId) -> U128 {
         self.drip.get_drip(account_id)
     }
 
-    pub fn check_shared(&self, hierarchies: Vec<Hierarchy>, account_id: AccountId) -> bool {
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), &self.encryption_bloom_filter).expect("content not found")
-        };
-        let share_hash = env::sha256(&(account_id.to_string() + "shared" + &hierarchy_hash).into_bytes());
-        let share_hash: CryptoHash = share_hash[..].try_into().unwrap();
-        self.relationship_bloom_filter.check(&WrappedHash::from(share_hash))
-    }
-
     pub fn check_viewed(&self, hierarchies: Vec<Hierarchy>, inviter_id: AccountId, account_id: AccountId) -> bool {
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), &self.public_bloom_filter) {
+        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_bloom_filter) {
             Some(v) => v,
-            None => get_content_hash(hierarchies, &self.encryption_bloom_filter).expect("content not found")
+            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_bloom_filter).expect("content not found")
         };
         let view_hash = env::sha256(&(account_id.to_string() + "viewed" + &hierarchy_hash + "invited_by" + &inviter_id.to_string()).into_bytes());
-        let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
-        self.relationship_bloom_filter.check(&WrappedHash::from(view_hash))
+        //let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
+        self.relationship_bloom_filter.check(&view_hash)
     }
 
     pub fn get_reports(&self, account_id: AccountId) -> Vec<Report> {

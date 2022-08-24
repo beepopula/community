@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 
-use bloom_filter::{Bloom, WrappedHash};
+use bit_tree::BitTree;
 use events::Event;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
@@ -22,7 +22,7 @@ use role::Permission;
 
 pub mod utils;
 pub mod signature;
-pub mod bloom_filter;
+pub mod bit_tree;
 pub mod post;
 pub mod owner;
 pub mod drip;
@@ -37,10 +37,8 @@ pub mod role;
 pub struct Community {
     owner_id: AccountId,
     public_key: String,
-    public_bloom_filter: Bloom,
-    encryption_bloom_filter: Bloom,
-    relationship_bloom_filter: Bloom,
-    access: Option<Access>,
+    content_bloom_filter: BitTree,
+    relationship_bloom_filter: BitTree,
     reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
     drip: Drip,
     roles: UnorderedMap<String, Role>
@@ -51,9 +49,9 @@ pub struct OldCommunity {
     owner_id: AccountId,
     public_key: String,
     moderators: UnorderedSet<AccountId>,
-    public_bloom_filter: Bloom,
-    encryption_bloom_filter: Bloom,
-    relationship_bloom_filter: Bloom,
+    public_bloom_filter: Vec<u8>,
+    encryption_bloom_filter: Vec<u8>,
+    relationship_bloom_filter: Vec<u8>,
     access: Option<Access>,
     reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
     drip: OldDrip,
@@ -72,10 +70,8 @@ impl Community {
         let mut this = Self {
             owner_id: owner_id.clone(),
             public_key: public_key,
-            public_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "public".to_string()),
-            encryption_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "encrypt".to_string()),
-            relationship_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "relationship".to_string()),
-            access: None,
+            content_bloom_filter: BitTree::new(28, "content".to_string()),
+            relationship_bloom_filter: BitTree::new(28, "relationship".to_string()),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
             roles: UnorderedMap::new("roles".as_bytes())
@@ -109,10 +105,8 @@ impl Community {
         let this = Community {
             owner_id: prev.owner_id,
             public_key: prev.public_key,
-            public_bloom_filter: prev.public_bloom_filter,
-            encryption_bloom_filter: prev.encryption_bloom_filter,
-            access: prev.access,
-            relationship_bloom_filter: Bloom::new_for_fp_rate_with_seed(1000000, 0.1, "relationship".to_string()),
+            content_bloom_filter: BitTree::new(28, "content".to_string()),
+            relationship_bloom_filter: BitTree::new(28, "relationship".to_string()),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
             roles: UnorderedMap::new("roles".as_bytes())
