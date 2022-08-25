@@ -26,17 +26,22 @@ pub struct Drip {
 pub struct DripAccount {
     balance: u128,     //post, comment, subcomment, comment to post, subcomment to post, subcomment to comment, like, report
     registered: bool,
-    one_day_timestamp: u64,   //update after 24h
-    content_count: u64
+    data: HashMap<String, String>,
+    // one_day_timestamp: u64,   //update after 24h
+    // content_count: u64
 }
+
+const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
+const CONTENT_COUNT: &str = "content_count";
 
 impl Default for DripAccount {
     fn default() -> Self {
         Self {
             balance: 0,
             registered: false,
-            one_day_timestamp: env::block_timestamp(),
-            content_count: 0
+            data: HashMap::new(),
+            // one_day_timestamp: env::block_timestamp(),
+            // content_count: 0
         }
     }
 }
@@ -102,13 +107,8 @@ impl Drip {
             }
         }
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        if env::block_timestamp() - account.one_day_timestamp > 60 * 60 * 24 * 1000_000_000 {
-            account.one_day_timestamp = env::block_timestamp();
-            account.content_count = 0
-        }
-        let decay = get_account_decay(account.content_count);
-        drip *= decay * per;
-        account.balance += (drip / U256::from(100 as u128) / U256::from(100 as u128) / U256::from(100 as u128)).as_u128();
+        drip *= per;
+        account.balance += (drip / U256::from(100 as u128)).as_u128();
         self.accounts.insert(&account_id, &account);
     }
     
@@ -129,7 +129,16 @@ impl Drip {
         if let Some(prev_content_count) = prev_content_count {
             per = get_content_decay(prev_content_count);
         }
-        
+
+        let mut account = self.accounts.get(&account_id).unwrap_or_default();
+        let timestamp: u64 = account.data.get(&ONE_DAY_TIMESTAMP.to_string()).unwrap().parse().unwrap();
+        if env::block_timestamp() - timestamp > 60 * 60 * 24 * 1000_000_000 {
+            account.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
+            account.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
+        }
+        let content_count = (account.data.get(&CONTENT_COUNT.to_string()).unwrap()).parse().unwrap();
+        per = get_account_decay(content_count) * per / 100 / 100;
+        account.data.insert(CONTENT_COUNT.to_string(), (content_count + 1).to_string());
         self.set_drip(key, None, &account_id, per);
     }
 
