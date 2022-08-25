@@ -18,6 +18,12 @@ impl Community {
         assert!(sender == self.owner_id, "owner only");
         self.owner_id = account_id;
     }
+
+    pub fn del_contract(&mut self) {
+        let sender = env::predecessor_account_id();
+        assert!(sender == self.owner_id, "owner only");
+        Promise::new(env::current_account_id()).delete_account(sender);
+    }
 }
 
 #[no_mangle]

@@ -37,8 +37,8 @@ pub mod role;
 pub struct Community {
     owner_id: AccountId,
     public_key: String,
-    content_bloom_filter: BitTree,
-    relationship_bloom_filter: BitTree,
+    content_tree: BitTree,
+    relationship_tree: BitTree,
     reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
     drip: Drip,
     roles: UnorderedMap<String, Role>
@@ -51,12 +51,24 @@ pub struct OldCommunity {
     moderators: UnorderedSet<AccountId>,
     public_bloom_filter: Vec<u8>,
     encryption_bloom_filter: Vec<u8>,
-    relationship_bloom_filter: Vec<u8>,
+    relationship_tree: Vec<u8>,
     access: Option<Access>,
     reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
     drip: OldDrip,
 }
 
+
+
+#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Value(Vec<(u8, u16)>);
+
+impl Value {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+}
 
 
 const MAX_LEVEL: usize = 3;
@@ -70,8 +82,8 @@ impl Community {
         let mut this = Self {
             owner_id: owner_id.clone(),
             public_key: public_key,
-            content_bloom_filter: BitTree::new(28, "content".to_string()),
-            relationship_bloom_filter: BitTree::new(28, "relationship".to_string()),
+            content_tree: BitTree::new(28, "content".to_string()),
+            relationship_tree: BitTree::new(28, "relationship".to_string()),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
             roles: UnorderedMap::new("roles".as_bytes())
@@ -105,8 +117,8 @@ impl Community {
         let this = Community {
             owner_id: prev.owner_id,
             public_key: prev.public_key,
-            content_bloom_filter: BitTree::new(28, "content".to_string()),
-            relationship_bloom_filter: BitTree::new(28, "relationship".to_string()),
+            content_tree: BitTree::new(28, "content".to_string()),
+            relationship_tree: BitTree::new(28, "relationship".to_string()),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
             roles: UnorderedMap::new("roles".as_bytes())
@@ -135,7 +147,10 @@ impl Community {
         let sender_id = env::signer_account_id();
         self.drip.get_and_clear_drip(sender_id)
     }
-    
+
+    pub fn get_all_nodes(&self) -> Vec<HashMap<(u32, bool), Option<u32>>> {
+        self.content_tree.get_all_nodes()
+    }
 }
 
 

@@ -42,28 +42,38 @@ impl Default for DripAccount {
 }
 
 fn get_map_value(key: &String) -> u128 {
-    let map: HashMap<String, u128> = serde_json::from_str(&json!({
-        "content0": 200000000000000000000000 as u128,
-        "content1": 200000000000000000000000 as u128,
-        "content2": 200000000000000000000000 as u128,
-        "content3": 100000000000000000000000 as u128,
-        "content4": 40000000000000000000000 as u128,
-        "content5": 100000000000000000000000 as u128,
-        "like": 200000000000000000000000 as u128,
-        "share": 200000000000000000000000 as u128,
-        "be_shared": 50000000000000000000000 as u128,
-        "be_liked": 50000000000000000000000 as u128,
+    let map: HashMap<String, U128> = serde_json::from_str(&json!({
+        "content0": "200000000000000000000000",
+        "content1": "200000000000000000000000",
+        "content2": "200000000000000000000000",
+        "content3": "100000000000000000000000",
+        "content4": "40000000000000000000000",
+        "content5": "100000000000000000000000",
+        "like": "200000000000000000000000",
+        "share": "200000000000000000000000",
+        "be_shared": "50000000000000000000000",
+        "be_liked": "50000000000000000000000",
     }).to_string()).unwrap();
-    *map.get(key).unwrap_or(&(0 as u128))
+    let val = *map.get(key).unwrap_or(&(U128::from(0)));
+    val.0
 }
 
 fn get_account_decay(count: u64) -> u32 {
-    if count >= 0 && count <= 10 {
+    if count <= 10 {
         return 100
     } else if count > 10 && count <= 20 {
         return 50
     }
     25
+}
+
+fn get_content_decay(count: u8) -> u32 {
+    match count {
+        1 => 100,
+        2 => 75,
+        3 => 60,
+        _ => 50
+    }
 }
 
 impl Drip {
@@ -74,7 +84,7 @@ impl Drip {
         this
     }
 
-    fn set_drip(&mut self, key: String, hierarchy: Option<Hierarchy>, account_id: &AccountId) {
+    fn set_drip(&mut self, key: String, hierarchy: Option<Hierarchy>, account_id: &AccountId, per: u32) {
         let total_drip = U256::from(get_map_value(&key)) * U256::from(100 as u128);
         let mut drip = total_drip.clone();
         if let Some(hierarchy) = hierarchy {
@@ -97,13 +107,13 @@ impl Drip {
             account.content_count = 0
         }
         let decay = get_account_decay(account.content_count);
-        drip *= decay;
-        account.balance += (drip / U256::from(100 as u128) / U256::from(100 as u128)).as_u128();
+        drip *= decay * per;
+        account.balance += (drip / U256::from(100 as u128) / U256::from(100 as u128) / U256::from(100 as u128)).as_u128();
         self.accounts.insert(&account_id, &account);
     }
     
 
-    pub fn set_content_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
+    pub fn set_content_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId, prev_content_count: Option<u8>) {
         let len = hierarchies.len();
 
         for (i, hierarchy) in hierarchies.iter().enumerate() { 
@@ -111,11 +121,16 @@ impl Drip {
                 continue
             }
             let key = "content".to_string() + &(i + MAX_LEVEL + len - 1).to_string();
-            self.set_drip(key, Some(hierarchy.clone()), &hierarchy.account_id);
+            self.set_drip(key, Some(hierarchy.clone()), &hierarchy.account_id, 100);
         }
 
         let key = "content".to_string() + &(len).to_string();
-        self.set_drip(key, None, &account_id);
+        let mut per = 100;
+        if let Some(prev_content_count) = prev_content_count {
+            per = get_content_decay(prev_content_count);
+        }
+        
+        self.set_drip(key, None, &account_id, per);
     }
 
     pub fn set_like_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
@@ -126,10 +141,10 @@ impl Drip {
         }
         let key = "be_liked".to_string();
     
-        self.set_drip(key, Some(hierarchy.clone()), &content_account_id);
+        self.set_drip(key, Some(hierarchy.clone()), &content_account_id, 100);
 
         let key = "like".to_string();
-        self.set_drip(key, Some(hierarchy.clone()), &account_id);
+        self.set_drip(key, Some(hierarchy.clone()), &account_id, 100);
     }
 
     pub fn set_report_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
@@ -139,12 +154,12 @@ impl Drip {
             return
         }
         let key = "report".to_string();
-        self.set_drip(key, Some(hierarchy.clone()), &account_id);
+        self.set_drip(key, Some(hierarchy.clone()), &account_id, 100);
     }
 
     pub fn set_report_confirm_drip(&mut self, account_id: AccountId) {
         let key = "report_confirm".to_string();
-        self.set_drip(key, None, &account_id);
+        self.set_drip(key, None, &account_id, 100);
     }
 
     pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) {
@@ -154,12 +169,12 @@ impl Drip {
         }
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         let key = "be_shared".to_string();
-        self.set_drip(key, Some(hierarchy.clone()), &content_account_id);
+        self.set_drip(key, Some(hierarchy.clone()), &content_account_id, 100);
 
         let key = "share".to_string();
         match self.accounts.get(&account_id) {
             Some(_) => {
-                self.set_drip(key, None, &account_id);
+                self.set_drip(key, None, &account_id, 100);
             },
             None => return
         }

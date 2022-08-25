@@ -2,6 +2,7 @@ use crate::*;
 use tree_map::TreeMap;
 
 mod tree_map;
+mod raw_value;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct BitTree {
@@ -42,5 +43,9 @@ impl BitTree {
         let bits = self.check(key);
         self.set(key, val);
         bits
+    }
+
+    pub fn get_all_nodes(&self) -> Vec<HashMap<(u32, bool), Option<u32>>> {
+        self.bit_tree.get_all_nodes()
     }
 }

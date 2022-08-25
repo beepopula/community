@@ -51,18 +51,18 @@ pub(crate) fn get_parent_contract_id() -> AccountId {
 }
 
 
-pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>, bloom_filter: &BitTree) -> Option<String> {
+pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>, tree: &BitTree) -> Option<String> {
     let mut hash_prefix = "".to_string();
     for (_, hierarchy) in hierarchies.iter().enumerate() {
         let mut hierarchy_str = hash_prefix + &hierarchy.account_id.to_string() + &String::from(&hierarchy.target_hash);
         if let Some(options) = hierarchy.options.clone() {
             hierarchy_str += &json!(options).to_string();
         }
-        if let Some(extra) = extra {
+        if let Some(extra) = extra.clone() {
             hierarchy_str += &extra;
         }
         let hierarchy_hash = env::sha256(&hierarchy_str.into_bytes());
-        if !bloom_filter.check(&hierarchy_hash) {
+        if !tree.check(&hierarchy_hash) {
             return None
         }
         let hierarchy_hash: [u8;32] = hierarchy_hash[..].try_into().unwrap();
@@ -71,24 +71,21 @@ pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String
     Some(hash_prefix)
 }
 
-pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: String, options:Option<HashMap<String, String>>, extra: Option<String>, bloom_filter: &mut BitTree) -> Base58CryptoHash {
+pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: String, options:Option<HashMap<String, String>>, extra: Option<String>, tree: &mut BitTree) -> Base58CryptoHash {
     let args = args.clone() + &bs58::encode(env::random_seed()).into_string();
     let target_hash = env::sha256(&args.clone().into_bytes());
     let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
-    let mut hierarchy_str = hash_prefix + &account_id.to_string() + &String::from(&Base58CryptoHash::from(target_hash));
+
+    let mut hierarchy_str = hash_prefix.clone() + &account_id.to_string() + &String::from(&Base58CryptoHash::from(target_hash));
     if let Some(options) = options {
         hierarchy_str += &json!(options).to_string();
     }
     if let Some(extra) = extra {
         hierarchy_str += &extra;
-    }
+    }    
+
     let hash = env::sha256(&hierarchy_str.into_bytes());
     //let hash: CryptoHash = hash[..].try_into().unwrap();
-    let bit_arg = bloom_filter.get(&hash).unwrap();
-    bit_arg += 1;
-    if bit_arg > 3 {
-        bit_arg = 3;
-    }
-    bloom_filter.set(&hash, bit_arg);
+    tree.set(&hash, 0);
     Base58CryptoHash::from(target_hash)
 }
