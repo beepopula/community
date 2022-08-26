@@ -235,7 +235,6 @@ impl Community {
 
     pub fn share_view(&mut self, hierarchies: Vec<Hierarchy>, inviter_id: AccountId) {
         let sender_id = env::predecessor_account_id();
-        assert!(inviter_id != sender_id, "failed");
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")

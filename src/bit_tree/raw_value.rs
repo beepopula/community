@@ -72,7 +72,7 @@ impl TryFrom<Vec<u8>> for RawValue {
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         if value.len() as u32 % ((u8::BITS + u16::BITS) / u8::BITS) != 0 {
-            return Err(format!("{:?}", value.len()))
+            return Err(format!("{:?}, {:?}", value.len(), value))
         }
         Ok(RawValue(value))
     }
