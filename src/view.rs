@@ -16,12 +16,29 @@ impl Community {
         self.drip.get_drip(account_id)
     }
 
+    pub fn get_account_decay(&self, account_id: AccountId) -> u32 {
+        self.drip.get_account_decay(account_id)
+    }
+
+    pub fn get_content_decay(&self, hierarchies: Vec<Hierarchy>) -> u32 {
+        let mut content_count = 0;
+        if hierarchies.len() > 0 {
+            let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
+                Some(v) => v,
+                None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
+            };
+            let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hierarchy_hash).unwrap());
+            content_count = self.content_tree.get(&prev_hash).unwrap();
+        }
+        self.drip.get_content_decay(content_count as u32)
+    }
+
     pub fn check_viewed(&self, hierarchies: Vec<Hierarchy>, inviter_id: AccountId, account_id: AccountId) -> bool {
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
         };
-        let view_hash = env::sha256(&(account_id.to_string() + "viewed" + &hierarchy_hash + "invited_by" + &inviter_id.to_string()).into_bytes());
+        let view_hash = env::sha256(&(account_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
         //let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
         self.relationship_tree.check(&view_hash)
     }

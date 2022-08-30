@@ -76,14 +76,7 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
     let target_hash = env::sha256(&args.clone().into_bytes());
     let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
 
-    if hash_prefix != "".to_string() {
-        let prev_hash = Base58CryptoHash::try_from(hash_prefix.clone()).unwrap().try_to_vec().unwrap();
-        let mut val = tree.get(&prev_hash).unwrap();
-        val += 1;
-        tree.set(&prev_hash, val)
-    }
-
-    let mut hierarchy_str = hash_prefix.clone() + &account_id.to_string() + &String::from(&Base58CryptoHash::from(target_hash));
+    let mut hierarchy_str = hash_prefix + &account_id.to_string() + &String::from(&Base58CryptoHash::from(target_hash));
     if let Some(options) = options {
         hierarchy_str += &json!(options).to_string();
     }

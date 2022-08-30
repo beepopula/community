@@ -7,19 +7,25 @@ impl Community {
         self.public_key.clone()
     }
 
+    #[payable]
     pub fn set_public_key(&mut self, public_key: String) {
+        assert_one_yocto();
         let sender = env::predecessor_account_id();
         assert!(sender == self.owner_id, "owner only");
         self.public_key = public_key;
     }
 
+    #[payable]
     pub fn set_owner(&mut self, account_id: AccountId) {
+        assert_one_yocto();
         let sender = env::predecessor_account_id();
         assert!(sender == self.owner_id, "owner only");
         self.owner_id = account_id;
     }
 
+    #[payable]
     pub fn del_contract(&mut self) {
+        assert_one_yocto();
         let sender = env::predecessor_account_id();
         assert!(sender == self.owner_id, "owner only");
         Promise::new(env::current_account_id()).delete_account(sender);

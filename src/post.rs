@@ -126,8 +126,14 @@ impl Community {
 
         let mut prev_content_count = 0;
         if hierarchies.len() > 0 {
-            let prev_hash = Base58CryptoHash::try_from(hash_prefix).unwrap().try_to_vec().unwrap();
-            prev_content_count = self.content_tree.get(&prev_hash).unwrap();
+            let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap());
+            let mut val = self.content_tree.get(&prev_hash).unwrap();
+            prev_content_count = val.clone();
+            val += 1;
+            if val > 3 {
+                val = 3;
+            }
+            self.content_tree.set(&prev_hash, val)
         }
 
         let drips = self.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), Some(prev_content_count));
@@ -165,7 +171,7 @@ impl Community {
         
         let mut prev_content_count = 0;
         if hierarchies.len() > 0 {
-            let prev_hash = Base58CryptoHash::try_from(hash_prefix).unwrap().try_to_vec().unwrap();
+            let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix).unwrap());
             prev_content_count = self.content_tree.get(&prev_hash).unwrap();
         }
 

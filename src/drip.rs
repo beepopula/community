@@ -57,8 +57,8 @@ fn get_map_value(key: &String) -> u128 {
         "content3": "100000000000000000000000",    //comment to post            passive
         "content4": "40000000000000000000000",     //subcomment to post         passive
         "content5": "100000000000000000000000",    //subcomment to comment      passive
-        "like": "200000000000000000000000",        //like                       active
-        "share": "200000000000000000000000",       //share                      active for inviter
+        "like": "20000000000000000000000",         //like                       active
+        "share": "20000000000000000000000",        //share                      active for inviter
         "be_shared": "50000000000000000000000",    //be_shared                  passive
         "be_liked": "50000000000000000000000",     //be_liked                   passive
     }).to_string()).unwrap();
@@ -77,9 +77,9 @@ fn get_account_decay(count: u64) -> u32 {
 
 fn get_content_decay(count: u8) -> u32 {
     match count {
-        1 => 100,
-        2 => 75,
-        3 => 60,
+        0 => 100,
+        1 => 75,
+        2 => 60,
         _ => 50
     }
 }
@@ -93,7 +93,7 @@ impl Drip {
     }
 
     fn set_drip(&mut self, key: String, options: Option<HashMap<String, String>>, account_id: &AccountId, per: u32) -> Vec<(AccountId, String, U128)> {
-        let total_drip = U256::from(get_map_value(&key)) * U256::from(100 as u128);
+        let total_drip = U256::from(get_map_value(&key));
         let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
         let mut drip = total_drip.clone();
 
@@ -147,9 +147,9 @@ impl Drip {
             account.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
         }
         let content_count = (account.data.get(&CONTENT_COUNT.to_string()).unwrap_or(&0.to_string())).parse().unwrap();
-        per = get_account_decay(content_count) * per / 100 / 100;
+        per = get_account_decay(content_count) * per / 100;
         account.data.insert(CONTENT_COUNT.to_string(), (content_count + 1).to_string());
-        let items = self.set_drip(key, None, &account_id, 100);  //TODO
+        let items = self.set_drip(key, None, &account_id, per); 
         [drip_items, items].concat()
     }
 
@@ -164,6 +164,7 @@ impl Drip {
         let key = "be_liked".to_string();
         let items = self.set_drip(key, hierarchy.options.clone(), &content_account_id, 100);
         drip_items = [drip_items, items].concat();
+        
 
         let key = "like".to_string();
         let items = self.set_drip(key, hierarchy.options.clone(), &account_id, 100);
@@ -188,6 +189,7 @@ impl Drip {
     pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
         let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
         if content_account_id == account_id {
+            log!("{:?}, {:?}", content_account_id, account_id);
             return vec![]
         }
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
@@ -221,7 +223,19 @@ impl Drip {
         account.balance.into()
     }
 
-    
+    pub fn get_account_decay(&self, account_id: AccountId) -> u32 {
+        let account = self.accounts.get(&account_id).unwrap_or_default();
+        let timestamp: u64 = account.data.get(&ONE_DAY_TIMESTAMP.to_string()).unwrap_or(&env::block_timestamp().to_string()).parse().unwrap();
+        let mut content_count = (account.data.get(&CONTENT_COUNT.to_string()).unwrap_or(&0.to_string())).parse().unwrap();
+        if env::block_timestamp() - timestamp > 60 * 60 * 24 * 1000_000_000 {
+            content_count = 0;
+        }
+        get_account_decay(content_count)
+    }
+
+    pub fn get_content_decay(&self, content_count: u32) -> u32 {
+        get_content_decay(content_count as u8)
+    }
 }
 
 
