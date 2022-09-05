@@ -147,10 +147,6 @@ impl Community {
         let sender_id = env::signer_account_id();
         self.drip.get_and_clear_drip(sender_id)
     }
-
-    pub fn get_all_nodes(&self) -> Vec<HashMap<(u32, bool), Option<u32>>> {
-        self.content_tree.get_all_nodes()
-    }
 }
 
 
