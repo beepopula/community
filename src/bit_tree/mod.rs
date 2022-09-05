@@ -44,16 +44,4 @@ impl BitTree {
         self.set(key, val);
         bits
     }
-
-    pub fn get_all_nodes(&self) -> Vec<HashMap<(u32, bool), Option<u32>>> {
-        self.bit_tree.get_all_nodes()
-    }
-
-    pub fn test_get(&self, key: &[u8]) -> Option<Vec<u8>> {
-        self.bit_tree.test_get(key)
-    }
-
-    pub fn test_set(&mut self, key: &[u8], val: u8) {
-        self.bit_tree.test_set(key, val)
-    }
 }
