@@ -87,8 +87,8 @@ impl TreeMap
             let block = key[bytes];
 
             let bit = block & ((1 as u8) << bits);
-            let bit = if bit == 1 {true} else {false};
-    
+            let bit = if bit > 0 {true} else {false};
+
             let raw_key = get_raw_key(&bit, &node);
             if let Some(raw_key) = raw_key {
                 node = Node {
@@ -104,7 +104,6 @@ impl TreeMap
                 node = new_node;
             }
         }
-
         let mut bit_vec = RawValue::try_from(node.next.get(&true).unwrap_or(Vec::new())).unwrap();
         let bit_index: u8 = get_u8(self.max_bits, key);
         bit_vec.set_val(bit_index, val);
@@ -123,7 +122,7 @@ impl TreeMap
             let block = key[bytes];
 
             let bit = block & ((1 as u8) << bits);
-            let bit = if bit == 1 {true} else {false};
+            let bit = if bit > 0 {true} else {false};
     
             let raw_key = get_raw_key(&bit, &node);
 
@@ -160,8 +159,7 @@ impl TreeMap
             let block = key[bytes];
 
             let bit = block & ((1 as u8) << bits);
-            let bit = if bit == 1 {true} else {false};
-
+            let bit = if bit > 0 {true} else {false};
             let raw_key = get_raw_key(&bit, &node);
 
             if let Some(raw_key) = raw_key {
@@ -196,7 +194,7 @@ impl TreeMap
             let block = key[bytes];
 
             let bit = block & ((1 as u8) << bits);
-            let bit = if bit == 1 {true} else {false};
+            let bit = if bit > 0 {true} else {false};
 
             let raw_key = get_raw_key(&bit, &node);
             if let Some(raw_key) = raw_key {
@@ -219,42 +217,28 @@ impl TreeMap
         let bit_index: u8 = get_u8(self.max_bits, key);
         bit_vec.get_val(bit_index).is_some()
     }
-
-    pub fn get_all_nodes(&self) -> Vec<HashMap<(u32, bool), Option<u32>>> {
-        let mut arr = Vec::new();
-        for i in 0..self.node_index {
-            let mut map = HashMap::new();
-            let raw_key = make_raw_key(i);
-            let node = Node {
-                next: LookupMap::new([raw_key.clone(), self.tree.clone()].concat())
-            };
-            match node.next.get(&true) {
-                Some(v) => {
-                    map.insert((i, true), Some(u32::try_from_slice(&v[0..4]).unwrap()))
-                },
-                None => map.insert((i, true), None)
-            };
-            match node.next.get(&true) {
-                Some(v) => map.insert((i, false), Some(u32::try_from_slice(&v[0..4]).unwrap())),
-                None => map.insert((i, false), None)
-            };
-            arr.push(map);
-        }
-        arr
-    }
 }
 
 
 
 #[cfg(test)]
 mod tests {
-    use crate::bit_tree::tree_map::get_u8;
+    use near_sdk::env;
+
+    use crate::bit_tree::{tree_map::get_u8, BitTree};
 
 
     #[test]
     pub fn test() {
-        let res = get_u8(28, &[77, 85, 252, 171, 10, 255, 134, 40, 226, 217, 16, 199, 165, 38, 243, 95, 166, 29, 111, 245, 161, 84, 144, 118, 6, 165, 184, 185, 118, 149, 152, 99]);
-        print!("{:?}", res);
+
     }
 
+    #[test]
+    pub fn test_set() {
+        let arr: Vec<u8> = vec![44, 236, 49, 109, 179, 223, 84, 234, 247, 12, 229, 59, 27, 84, 177, 70, 75, 115, 100, 209, 117, 121, 112, 241, 92, 182, 155, 50, 187, 142, 233, 57];
+        let mut bit_tree = BitTree::new(28, vec![1]);
+        bit_tree.set(&arr, 2);
+        let res = bit_tree.get(&arr);
+        println!("{:?}", res);
+    }
 }

@@ -14,7 +14,7 @@ impl RawValue {
         if self.0.get((w + block_step - 1) as usize).is_none() {
             return None
         }
-        if self.0.get(w as usize).unwrap() | flag >> b == 0 {
+        if self.0.get(w as usize).unwrap() & flag == 0 {
             return None
         }
 
@@ -62,7 +62,6 @@ impl RawValue {
         if self.0.get((w + block_step - 1) as usize).is_none() {
             return
         }
-
         let k = (&(self.0))[w as usize] & !flag;
         let e = self.0.get_mut(w as usize).unwrap();
         *e = k;
@@ -95,4 +94,22 @@ impl TryInto<Vec<u8>> for RawValue {
     fn try_into(self) -> Result<Vec<u8>, Self::Error> {
         Ok(self.0)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryFrom;
+
+    use super::RawValue;
+
+
+    #[test]
+    pub fn test() {
+        let mut raw_value = RawValue::try_from(Vec::new()).unwrap();
+        raw_value.set_val(99, 1);
+        let res = raw_value.del_val(99);
+        print!("{:?}", res);
+        print!("===========");
+    }
+
 }

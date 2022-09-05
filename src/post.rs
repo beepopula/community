@@ -198,6 +198,7 @@ impl Community {
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
         };
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
+        log!("{:?}", hash);
         let exist = self.relationship_tree.check_and_set(&hash, 0);
         let mut drips = Vec::new();
         if !exist {
