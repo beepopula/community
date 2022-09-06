@@ -82,8 +82,8 @@ impl Community {
         let mut this = Self {
             owner_id: owner_id.clone(),
             public_key: public_key,
-            content_tree: BitTree::new(28, vec![0]),
-            relationship_tree: BitTree::new(28, vec![1]),
+            content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
+            relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
             roles: UnorderedMap::new("roles".as_bytes())
@@ -117,8 +117,8 @@ impl Community {
         let this = Community {
             owner_id: prev.owner_id,
             public_key: prev.public_key,
-            content_tree: BitTree::new(28, vec![0]),
-            relationship_tree: BitTree::new(28, vec![1]),
+            content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
+            relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
             roles: UnorderedMap::new("roles".as_bytes())

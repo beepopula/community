@@ -1,98 +1,131 @@
+use std::marker::PhantomData;
+
 use crate::*;
 
 #[derive(BorshSerialize, BorshDeserialize)]
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
-pub struct RawValue(Vec<u8>);
+pub struct RawValue {
+    data: Vec<u8>,
+    bit_width: u8
+}
 
 impl RawValue {
+    pub fn new(value: Vec<u8>, bit_width: u8) -> Self {
+        println!("bits: {}", bit_width);
+        Self {
+            data: value,
+            bit_width
+        }
+    }
+
     pub fn get_val(&self, index: u8)-> Option<u8> {
-        let block_step = u8::BITS / u8::BITS + u16::BITS / u8::BITS;
+        let block_step = u8::BITS / u8::BITS + self.bit_width as u32 / u8::BITS;
         let w = index as u32 / u8::BITS * block_step;
         let b = index as u32 % u8::BITS;
         let flag = (1 as u8) << b;
-        if self.0.get((w + block_step - 1) as usize).is_none() {
+        if self.data.get((w + block_step - 1) as usize).is_none() {
             return None
         }
-        if self.0.get(w as usize).unwrap() & flag == 0 {
+        if self.data.get(w as usize).unwrap() & flag == 0 {
             return None
         }
 
-        let c = &(&(self.0))[(w + u8::BITS / u8::BITS) as usize..(w + block_step) as usize];
-        let w_v = b * (u16::BITS / u8::BITS) / u8::BITS;
-        let b_v = b * (u16::BITS / u8::BITS) % u8::BITS;
+        if self.bit_width == 0 {
+            return Some(0)
+        }
+
+        let c = &(&(self.data))[(w + u8::BITS / u8::BITS) as usize..(w + block_step) as usize];
+        let w_v = b * (self.bit_width as u32 / u8::BITS) / u8::BITS;
+        let b_v = b * (self.bit_width as u32 / u8::BITS) % u8::BITS;
         let v = c[w_v as usize];
-        let flag = ((2 as u8).pow(u16::BITS / u8::BITS) as u8 - 1) << b_v;
+        let flag = ((2 as u8).pow(self.bit_width as u32 / u8::BITS) as u8 - 1) << b_v;
         Some(((v & flag) >> b_v) as u8)
     }
 
     pub fn set_val(&mut self, index: u8, val: u8) {
-        let block_step = u8::BITS / u8::BITS + u16::BITS / u8::BITS;
+        let block_step = u8::BITS / u8::BITS + self.bit_width as u32 / u8::BITS;
         let w = index as u32 / u8::BITS * block_step;
         let b = index as u32 % u8::BITS;
         for i in 0..w + 1 * block_step {
-            if self.0.get(i as usize).is_none() {
-                self.0.push(0);
+            if self.data.get(i as usize).is_none() {
+                self.data.push(0);
             }
         }
 
         let flag = (1 as u8) << b;
-        let k = (&(self.0))[w as usize] | flag;
-        let e = self.0.get_mut(w as usize).unwrap();
+        let k = (&(self.data))[w as usize] | flag;
+        let e = self.data.get_mut(w as usize).unwrap();
         *e = k;
+        
+        if self.bit_width == 0 {
+            return
+        }
 
-        let c = &(&(self.0))[(w + u8::BITS / u8::BITS) as usize..(w + block_step) as usize];
-        let w_v = b * (u16::BITS / u8::BITS) / u8::BITS;
-        let b_v = b * (u16::BITS / u8::BITS) % u8::BITS;
+        let c = &(&(self.data))[(w + u8::BITS / u8::BITS) as usize..(w + block_step) as usize];
+        let w_v = b * (self.bit_width as u32 / u8::BITS) / u8::BITS;
+        let b_v = b * (self.bit_width as u32 / u8::BITS) % u8::BITS;
         let mut v = c[w_v as usize];
-        let flag = ((2 as u8).pow(u16::BITS / u8::BITS) as u8 - 1) << b_v;
+        let flag = ((2 as u8).pow(self.bit_width as u32 / u8::BITS) as u8 - 1) << b_v;
         v = v & !flag;
         let flag = ((val as u8) as u8) << b_v;
         v = v | flag;
-        let e = self.0.get_mut((w + (u8::BITS / u8::BITS) + w_v) as usize).unwrap();
+        let e = self.data.get_mut((w + (u8::BITS / u8::BITS) + w_v) as usize).unwrap();
         *e = v;
     }
 
     pub fn del_val(&mut self, index: u8) {
-        let block_step = u8::BITS / u8::BITS + u16::BITS / u8::BITS;
+        let block_step = u8::BITS / u8::BITS + self.bit_width as u32 / u8::BITS;
         let w = index as u32 / u8::BITS * block_step;
         let b = index as u32 % u8::BITS;
         let flag = (1 as u8) << b;
         
-        if self.0.get((w + block_step - 1) as usize).is_none() {
+        if self.data.get((w + block_step - 1) as usize).is_none() {
             return
         }
-        let k = (&(self.0))[w as usize] & !flag;
-        let e = self.0.get_mut(w as usize).unwrap();
+        let k = (&(self.data))[w as usize] & !flag;
+        let e = self.data.get_mut(w as usize).unwrap();
         *e = k;
 
-        let c = &(&(self.0))[(w + u8::BITS / u8::BITS) as usize..(w + block_step) as usize];
-        let w_v = b * (u16::BITS / u8::BITS) / u8::BITS;
-        let b_v = b * (u16::BITS / u8::BITS) % u8::BITS;
+        if self.bit_width == 0 {
+            return
+        }
+
+        let c = &(&(self.data))[(w + u8::BITS / u8::BITS) as usize..(w + block_step) as usize];
+        let w_v = b * (self.bit_width as u32 / u8::BITS) / u8::BITS;
+        let b_v = b * (self.bit_width as u32 / u8::BITS) % u8::BITS;
         let mut v = c[w_v as usize];
-        let flag = ((2 as u8).pow(u16::BITS / u8::BITS) as u8 - 1) << b_v;
+        let flag = ((2 as u8).pow(self.bit_width as u32 / u8::BITS) as u8 - 1) << b_v;
         v = v & !flag;
-        let e = self.0.get_mut((w + (u8::BITS / u8::BITS) + w_v) as usize).unwrap();
+        let e = self.data.get_mut((w + (u8::BITS / u8::BITS) + w_v) as usize).unwrap();
         *e = v;
     }
 }
 
-impl TryFrom<Vec<u8>> for RawValue {
-    type Error = String;
+// impl TryFrom<Vec<u8>> for RawValue {
+//     type Error = String;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        if value.len() as u32 % ((u8::BITS + u16::BITS) / u8::BITS) != 0 {
-            return Err(format!("{:?}, {:?}", value.len(), value))
-        }
-        Ok(RawValue(value))
-    }
-}
+//     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+//         let mut bits = 0;
+//         for b in vec![u128::BITS, u64::BITS, u32::BITS, u16::BITS, u8::BITS] {
+//             if value.len() as u32 % ((u8::BITS + bits) / u8::BITS) == 0 {
+//                 bits = b;
+//                 break;
+//             }
+//         }
+//         println!("{}", bits);
+//         Ok(RawValue{
+//             data: value,
+//             bit_width: bits as u8
+//         })
+//     }
+// }
 
 impl TryInto<Vec<u8>> for RawValue {
     type Error = ();
 
     fn try_into(self) -> Result<Vec<u8>, Self::Error> {
-        Ok(self.0)
+        Ok(self.data)
     }
 }
 
@@ -105,11 +138,10 @@ mod tests {
 
     #[test]
     pub fn test() {
-        let mut raw_value = RawValue::try_from(Vec::new()).unwrap();
+        let mut raw_value = RawValue::new(Vec::new(), 2);
         raw_value.set_val(99, 1);
         let res = raw_value.del_val(99);
         print!("{:?}", res);
-        print!("===========");
     }
 
 }

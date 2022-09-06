@@ -10,9 +10,9 @@ pub struct BitTree {
 }
 
 impl BitTree {
-    pub fn new(max_bits: u32, key_prefix: Vec<u8>) -> Self {
+    pub fn new(max_bits: u32, key_prefix: Vec<u8>, bit_width: u8) -> Self {
         Self {
-            bit_tree: TreeMap::new(max_bits, key_prefix),
+            bit_tree: TreeMap::new(max_bits, key_prefix, bit_width),
         }
         //total 36 bits, 28 bits instead
     }
