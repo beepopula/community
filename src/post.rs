@@ -69,7 +69,9 @@ pub struct Access
 #[serde(crate = "near_sdk::serde")]
 #[derive(Debug, Clone)]
 pub enum Condition {
-    FTCondition(FTCondition)
+    FTCondition(FTCondition),
+    NFTCondition(NFTCondition),
+    DripCondition(DripCondition)
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -79,6 +81,24 @@ pub enum Condition {
 pub struct FTCondition {
     pub token_id: AccountId,
     pub amount_to_access: U128
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct NFTCondition {
+    pub token_id: AccountId,
+    pub amount_to_access: U128,
+    pub msg: String
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct DripCondition {
+    pub amount_to_access: U128,
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -198,7 +218,6 @@ impl Community {
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
         };
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
-        log!("{:?}", hash);
         let exist = self.relationship_tree.check_and_set(&hash, 0);
         let mut drips = Vec::new();
         if !exist {

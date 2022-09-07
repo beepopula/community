@@ -189,7 +189,6 @@ impl Drip {
     pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
         let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
         if content_account_id == account_id {
-            log!("{:?}, {:?}", content_account_id, account_id);
             return vec![]
         }
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();

@@ -12,7 +12,6 @@ pub struct RawValue {
 
 impl RawValue {
     pub fn new(value: Vec<u8>, bit_width: u8) -> Self {
-        println!("bits: {}", bit_width);
         Self {
             data: value,
             bit_width
@@ -102,25 +101,6 @@ impl RawValue {
     }
 }
 
-// impl TryFrom<Vec<u8>> for RawValue {
-//     type Error = String;
-
-//     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-//         let mut bits = 0;
-//         for b in vec![u128::BITS, u64::BITS, u32::BITS, u16::BITS, u8::BITS] {
-//             if value.len() as u32 % ((u8::BITS + bits) / u8::BITS) == 0 {
-//                 bits = b;
-//                 break;
-//             }
-//         }
-//         println!("{}", bits);
-//         Ok(RawValue{
-//             data: value,
-//             bit_width: bits as u8
-//         })
-//     }
-// }
-
 impl TryInto<Vec<u8>> for RawValue {
     type Error = ();
 
@@ -141,7 +121,6 @@ mod tests {
         let mut raw_value = RawValue::new(Vec::new(), 2);
         raw_value.set_val(99, 1);
         let res = raw_value.del_val(99);
-        print!("{:?}", res);
     }
 
 }

@@ -104,10 +104,7 @@ impl Community {
 
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-
         let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
-        // let success = env::storage_remove(b"r");
-        // log!("{:?}", success);
         assert_eq!(
             env::predecessor_account_id(),
             prev.owner_id,
