@@ -1,14 +1,9 @@
 use std::{collections::HashMap, ops::Deref};
 
 use crate::*;
+use account::Account;
 use post::Hierarchy;
 use uint::construct_uint;
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Debug)]
-pub struct OldDrip {
-    accounts: LookupMap<AccountId, HashMap<String, U128>>,  
-}
 
 construct_uint! {
     /// 256-bit unsigned integer.
@@ -18,35 +13,7 @@ construct_uint! {
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Debug)]
 pub struct Drip {
-    accounts: LookupMap<AccountId, DripAccount>,  
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Debug)]
-pub struct DripAccount {
-    balance: u128,     //post, comment, subcomment, comment to post, subcomment to post, subcomment to comment, like, report
-    registered: bool,
-    data: HashMap<String, String>,
-    // one_day_timestamp: u64,   //update after 24h
-    // content_count: u64
-}
-
-const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
-const CONTENT_COUNT: &str = "content_count";
-
-impl Default for DripAccount {
-    fn default() -> Self {
-        let mut this = Self {
-            balance: 0,
-            registered: false,
-            data: HashMap::new(),
-            // one_day_timestamp: env::block_timestamp(),
-            // content_count: 0
-        };
-        this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
-        this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
-        this
-    }
+    accounts: LookupMap<AccountId, Account>,  
 }
 
 fn get_map_value(key: &String) -> u128 {
@@ -66,15 +33,6 @@ fn get_map_value(key: &String) -> u128 {
     val.0
 }
 
-fn get_account_decay(count: u64) -> u32 {
-    if count <= 10 {
-        return 100
-    } else if count > 10 && count <= 20 {
-        return 50
-    }
-    25
-}
-
 fn get_content_decay(count: u8) -> u32 {
     match count {
         0 => 100,
@@ -87,7 +45,7 @@ fn get_content_decay(count: u8) -> u32 {
 impl Drip {
     pub fn new() -> Self {
         let mut this = Self { 
-            accounts:  LookupMap::new("drip".as_bytes()),
+            accounts:  LookupMap::new(StorageKey::Account),
         };
         this
     }
@@ -105,7 +63,7 @@ impl Drip {
                     drip -= account_royalty;
                     let account_royalty = (account_royalty / U256::from(100 as u128)).as_u128();
                     let mut account = self.accounts.get(&account_id).unwrap_or_default();
-                    account.balance += account_royalty;
+                    account.increase_drip(account_royalty);
                     self.accounts.insert(&account_id, &account);
                     drip_items.push((account_id, key.clone() + ":royalty", account_royalty.into()));
                 }
@@ -115,7 +73,7 @@ impl Drip {
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
         drip *= per;
         let drip = (drip / U256::from(100 as u128)).as_u128();
-        account.balance += drip;
+        account.increase_drip(drip);
         self.accounts.insert(&account_id, &account);
         drip_items.push((account_id.clone(), key, drip.into()));
         drip_items
@@ -141,14 +99,8 @@ impl Drip {
         }
 
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        let timestamp: u64 = account.data.get(&ONE_DAY_TIMESTAMP.to_string()).unwrap_or(&env::block_timestamp().to_string()).parse().unwrap();
-        if env::block_timestamp() - timestamp > 60 * 60 * 24 * 1000_000_000 {
-            account.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
-            account.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
-        }
-        let content_count = (account.data.get(&CONTENT_COUNT.to_string()).unwrap_or(&0.to_string())).parse().unwrap();
-        per = get_account_decay(content_count) * per / 100;
-        account.data.insert(CONTENT_COUNT.to_string(), (content_count + 1).to_string());
+        per = account.get_account_decay() * per / 100;
+        
         let items = self.set_drip(key, None, &account_id, per); 
         [drip_items, items].concat()
     }
@@ -210,54 +162,24 @@ impl Drip {
 
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> U128 {
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        assert!(account.registered, "not registered");
-        let balance = account.balance.clone();
-        account.balance = 0;
+        assert!(account.is_registered(), "not registered");
+        let balance = account.get_drip();
+        account.decrease_drip(balance);
         self.accounts.insert(&account_id, &account);
         balance.into()
     }
 
     pub fn get_drip(&self, account_id: AccountId) -> U128 {
         let account = self.accounts.get(&account_id).unwrap_or_default();
-        account.balance.into()
+        account.get_drip().into()
     }
 
     pub fn get_account_decay(&self, account_id: AccountId) -> u32 {
         let account = self.accounts.get(&account_id).unwrap_or_default();
-        let timestamp: u64 = account.data.get(&ONE_DAY_TIMESTAMP.to_string()).unwrap_or(&env::block_timestamp().to_string()).parse().unwrap();
-        let mut content_count = (account.data.get(&CONTENT_COUNT.to_string()).unwrap_or(&0.to_string())).parse().unwrap();
-        if env::block_timestamp() - timestamp > 60 * 60 * 24 * 1000_000_000 {
-            content_count = 0;
-        }
-        get_account_decay(content_count)
+        account.get_account_decay()
     }
 
     pub fn get_content_decay(&self, content_count: u32) -> u32 {
         get_content_decay(content_count as u8)
-    }
-}
-
-
-
-impl Drip {
-    pub fn join(&mut self, account_id: AccountId) {
-        let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        account.registered = true;
-        self.accounts.insert(&account_id, &account);
-    }
-
-    pub fn quit(&mut self, account_id: AccountId) {
-        let account = self.accounts.get(&account_id);
-        if let Some(mut account) = account {
-            if account.balance == 0 {
-                self.accounts.remove(&account_id);
-            } else {
-                account.registered = false
-            }
-        }
-    }
-
-    pub fn is_member(&self, account_id: AccountId) -> bool {
-        self.accounts.get(&account_id).is_some()
     }
 }

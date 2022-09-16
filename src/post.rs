@@ -54,69 +54,13 @@ pub struct Report {
     pub del: Option<bool>
 }
 
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug, Clone)]
-pub struct Access
-{
-    pub conditions: Vec<Condition>,
-    pub relationship: Relationship
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug, Clone)]
-pub enum Condition {
-    FTCondition(FTCondition),
-    NFTCondition(NFTCondition),
-    DripCondition(DripCondition)
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug, Clone)]
-pub struct FTCondition {
-    pub token_id: AccountId,
-    pub amount_to_access: U128
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug, Clone)]
-pub struct NFTCondition {
-    pub token_id: AccountId,
-    pub amount_to_access: U128,
-    pub msg: String
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug, Clone)]
-pub struct DripCondition {
-    pub amount_to_access: U128,
-}
-
-#[derive(BorshDeserialize, BorshSerialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug, Clone)]
-pub enum Relationship {
-    Or,
-    And
-}
-
 
 #[near_bindgen]
 impl Community {
 
     pub fn add_item(&mut self, args: String, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
         let sender_id = env::signer_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent), "not allowed");
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(0)), "not allowed");
         let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), options.clone(), None, &mut self.content_tree);
         let drips = self.drip.set_content_drip(Vec::new(), sender_id.clone(), None);
         Event::log_add_content(
@@ -135,7 +79,7 @@ impl Community {
 
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent), "not allowed");
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(hierarchies.len() as u8)), "not allowed");
         let args_obj: Args = serde_json::from_str(&args).unwrap();
         check_args(args_obj.text, args_obj.imgs, args_obj.video, args_obj.audio);
 
@@ -173,7 +117,7 @@ impl Community {
 
     pub fn add_encrypt_content(&mut self, encrypt_args: String, access: Option<Access>, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>, nonce: String, sign: String) -> Base58CryptoHash {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent), "not allowed");
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
         let pk: Vec<u8> = bs58::decode(self.public_key.clone()).into_vec().unwrap();
 
         let hash = env::sha256(&(encrypt_args.clone() + &nonce).into_bytes());

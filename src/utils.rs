@@ -90,3 +90,11 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
     tree.set(&hash, 0);
     Base58CryptoHash::from(target_hash)
 }
+
+pub(crate) fn is_registered(account_id: &AccountId) -> bool {
+    let accounts: UnorderedMap<AccountId, Account> = UnorderedMap::new(StorageKey::Account);
+    match accounts.get(&account_id) {
+        Some(v) => v.is_registered(),
+        None => false
+    }
+}
