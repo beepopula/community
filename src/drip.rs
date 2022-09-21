@@ -28,6 +28,8 @@ fn get_map_value(key: &String) -> u128 {
         "share": "20000000000000000000000",        //share                      active for inviter
         "be_shared": "50000000000000000000000",    //be_shared                  passive
         "be_liked": "50000000000000000000000",     //be_liked                   passive
+        "report": "400000000000000000000000",      //report                     passive
+        "report_refund": "200000000000000000000000",//report_refund             passive
     }).to_string()).unwrap();
     let val = *map.get(key).unwrap_or(&(U128::from(0)));
     val.0
@@ -119,7 +121,7 @@ impl Drip {
         
 
         let key = "like".to_string();
-        let items = self.set_drip(key, hierarchy.options.clone(), &account_id, 100);
+        let items = self.set_drip(key, None, &account_id, 100);
         [drip_items, items].concat()
     }
 
@@ -130,7 +132,17 @@ impl Drip {
             return vec![]
         }
         let key = "report".to_string();
-        self.set_drip(key, hierarchy.options.clone(), &account_id, 100)
+        self.set_drip(key, None, &account_id, 100)
+    }
+
+    pub fn set_report_refund_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
+        let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
+        let content_account_id = hierarchy.account_id.clone();
+        if content_account_id == account_id {
+            return vec![]
+        }
+        let key = "report_refund".to_string();
+        self.set_drip(key, None, &account_id, 100)
     }
 
     pub fn set_report_confirm_drip(&mut self, account_id: AccountId) -> Vec<(AccountId, String, U128)> {

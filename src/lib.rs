@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 
 use account::Account;
-use bit_tree::BitTree;
+use near_fixed_bit_tree::BitTree;
 use events::Event;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
@@ -14,7 +14,7 @@ use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise,
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
 use post::{Report};
-use role::{Role, RoleKind};
+use role::{Role, RoleKind, init_roles};
 use utils::{check_args, verify, check_encrypt_args, refund_extra_storage_deposit, set_content};
 use crate::post::Hierarchy;
 use std::convert::TryFrom;
@@ -24,7 +24,6 @@ use access::Access;
 
 pub mod utils;
 pub mod signature;
-pub mod bit_tree;
 pub mod post;
 pub mod owner;
 pub mod drip;
@@ -33,6 +32,7 @@ pub mod events;
 pub mod role;
 pub mod access;
 pub mod account;
+pub mod resolver;
 
 
 #[near_bindgen]
@@ -42,7 +42,7 @@ pub struct Community {
     public_key: String,
     content_tree: BitTree,
     relationship_tree: BitTree,
-    reports: UnorderedMap<AccountId, UnorderedMap<Base58CryptoHash, Report>>,
+    reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
     roles: UnorderedMap<String, Role>
 }
@@ -64,7 +64,8 @@ const MAX_LEVEL: usize = 3;
 #[derive(BorshSerialize, BorshStorageKey)]
 pub enum StorageKey {
     Report,
-    Account
+    Account,
+    Roles
 }
 
 
@@ -80,27 +81,10 @@ impl Community {
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
-            roles: UnorderedMap::new("roles".as_bytes())
+            roles: UnorderedMap::new(StorageKey::Roles)
         };
         this.join();
-        let mut permissions = HashSet::new();
-        permissions.insert(Permission::AddContent(0));
-        permissions.insert(Permission::AddContent(1));
-        permissions.insert(Permission::AddContent(2));
-        permissions.insert(Permission::DelContent);
-        permissions.insert(Permission::AddEncryptContent(0));
-        permissions.insert(Permission::AddEncryptContent(1));
-        permissions.insert(Permission::AddEncryptContent(2));
-        permissions.insert(Permission::DelEncryptContent);
-        permissions.insert(Permission::Like);
-        permissions.insert(Permission::Unlike);
-        permissions.insert(Permission::Report);
-        this.roles.insert(&"all".to_string(), &Role { 
-            kind: RoleKind::Everyone, 
-            permissions:  permissions,
-            mod_level: 0,
-            override_level: 0
-        });
+        init_roles();
         this
     }
 
@@ -128,7 +112,7 @@ impl Community {
     #[payable]
     pub fn join(&mut self) {
         let sender_id = env::predecessor_account_id();
-        let mut accounts: UnorderedMap<AccountId, Account> = UnorderedMap::new(StorageKey::Account);
+        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
         let mut account = accounts.get(&sender_id).unwrap_or_default();
         account.set_registered(true);
         accounts.insert(&sender_id, &account);
@@ -138,7 +122,7 @@ impl Community {
     pub fn quit(&mut self) {
         assert_one_yocto();
         let sender_id = env::predecessor_account_id();
-        let mut accounts: UnorderedMap<AccountId, Account> = UnorderedMap::new(StorageKey::Account);
+        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
         let account = accounts.get(&sender_id);
         if let Some(mut account) = account {
             if account.get_drip() == 0 {

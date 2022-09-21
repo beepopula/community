@@ -55,6 +55,9 @@ pub struct Report {
 }
 
 
+const REPORT_DEPOSIT: u128 = 5_000_000_000_000_000_000_000_000;
+
+
 #[near_bindgen]
 impl Community {
 
@@ -229,12 +232,9 @@ impl Community {
     }
 
 
-
-
-
     #[payable]
     pub fn report(&mut self, hierarchies: Vec<Hierarchy>) {
-        assert!(5_000_000_000_000_000_000_000_000 <= env::attached_deposit(), "not enough deposit");
+        assert!( REPORT_DEPOSIT <= env::attached_deposit(), "not enough deposit");
 
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Report), "not allowed");
@@ -242,20 +242,19 @@ impl Community {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
         };
-        let mut account = self.reports.get(&sender_id).unwrap_or(UnorderedMap::new((sender_id.to_string() + "report").as_bytes()));
-        account.insert(&Base58CryptoHash::try_from(hierarchy_hash).unwrap(), &Report{ 
-            hierarchies,
-            timestamp: env::block_timestamp().into(),
-            deposit: env::attached_deposit().into(), 
-            del: None 
-        });
-        self.reports.insert(&sender_id, &account);
+        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
+
+        let mut report_accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
+        if report_accounts.len() >= 10 {
+            return
+        }
+        report_accounts.insert(sender_id);
+        self.reports.insert(&hierarchy_hash, &report_accounts);
     }
 
-    pub fn report_confirm(&mut self, account_id: AccountId, hierarchies: Vec<Hierarchy>, del: bool) {
+    pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, del: Option<bool>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
-        assert!(account_id != sender_id, "signer_id = account_id");
 
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
             Some(v) => v,
@@ -263,33 +262,30 @@ impl Community {
         };
 
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        let mut account = self.reports.get(&account_id).unwrap();
-        let mut report = account.get(&hierarchy_hash).unwrap();
-        assert!(report.del.is_none(), "resolved");
-        report.del = Some(del); 
-        account.insert(&hierarchy_hash, &report);
-        self.reports.insert(&account_id, &account);
-
-        if del == true {
-            self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
-
-            self.drip.set_report_drip(hierarchies, account_id);
-            self.drip.set_report_confirm_drip(sender_id);
+        let mut accounts = self.reports.get(&hierarchy_hash).unwrap();
+        match del {
+            Some(del) => {
+                if del == true {
+                    self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
+                    for account_id in accounts {
+                        if account_id == sender_id {
+                            continue
+                        }
+                        self.drip.set_report_drip(hierarchies.clone(), account_id);
+                    }
+                    
+                    self.drip.set_report_confirm_drip(sender_id);
+                }
+            },
+            None => {
+                for account_id in accounts {
+                    if account_id == sender_id {
+                        continue
+                    }
+                    self.drip.set_report_drip(hierarchies.clone(), account_id);
+                }
+            }
         }
-    }
-
-    pub fn redeem_report_deposit(&mut self, hierarchies: Vec<Hierarchy>) {
-        let sender_id = env::predecessor_account_id();
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
-        let mut account = self.reports.get(&sender_id).unwrap_or(UnorderedMap::new((sender_id.to_string() + "report").as_bytes()));
-        let key = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        let report = account.get(&key).unwrap();
-        assert!(report.del == Some(true) || env::block_timestamp() - report.timestamp.0 > 2_592_000_000_000_000, "redeem failed");
-        Promise::new(sender_id.clone()).transfer(report.deposit.0);
-        account.remove(&key);
-        self.reports.insert(&sender_id, &account);
+        
     }
 }

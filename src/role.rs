@@ -106,6 +106,7 @@ impl RoleKind {
 #[derive(Debug)]
 pub struct Role {
     /// Kind of the role: defines which users this permissions apply.
+    pub alias: String,
     pub kind: RoleKind,
     pub permissions: HashSet<Permission>,
     pub mod_level: u32,
@@ -129,7 +130,6 @@ pub enum Permission {
 
 
     ReportConfirm,
-    ManageContent,
     SetRole(Option<String>),
     DelRole(Option<String>),
     AddMember(Option<String>),
@@ -137,16 +137,70 @@ pub enum Permission {
     Other(String)   //off-chain permission
 }
 
+pub fn init_roles() {
+    let mut roles = UnorderedMap::new(StorageKey::Roles);
+    let mut permissions = HashSet::new();
+    permissions.insert(Permission::AddContent(0));
+    permissions.insert(Permission::AddContent(1));
+    permissions.insert(Permission::AddContent(2));
+    permissions.insert(Permission::DelContent);
+    permissions.insert(Permission::AddEncryptContent(0));
+    permissions.insert(Permission::AddEncryptContent(1));
+    permissions.insert(Permission::AddEncryptContent(2));
+    permissions.insert(Permission::DelEncryptContent);
+    permissions.insert(Permission::Like);
+    permissions.insert(Permission::Unlike);
+    permissions.insert(Permission::Report);
+    roles.insert(&"all".to_string(), &Role { 
+        alias: "all".to_string(),
+        kind: RoleKind::Everyone, 
+        permissions:  permissions.clone(),
+        mod_level: 0,
+        override_level: 0
+    });
+    roles.insert(&"assistance".to_string(), &Role { 
+        alias: "all".to_string(),
+        kind: RoleKind::Group(Group {
+            members: UnorderedMap::new("assistance_member".as_bytes())
+        }), 
+        permissions:  permissions.clone(),
+        mod_level: 1,
+        override_level: 0
+    });
+    permissions.insert(Permission::SetRole(Some("all".to_string())));
+    permissions.insert(Permission::Other("ManageInfo".to_string()));
+    roles.insert(&"mod".to_string(), &Role { 
+        alias: "mod".to_string(),
+        kind: RoleKind::Group(Group {
+            members: UnorderedMap::new("mod_member".as_bytes())
+        }), 
+        permissions:  permissions,
+        mod_level: 2,
+        override_level: 0
+    });
+    roles.insert(&"ban".to_string(), &Role { 
+        alias: "all".to_string(),
+        kind: RoleKind::Group(Group {
+            members: UnorderedMap::new("ban_member".as_bytes())
+        }), 
+        permissions:  HashSet::new(),
+        mod_level: 0,
+        override_level: 99
+    });
+}
+
 
 #[near_bindgen]
 impl Community {
 
-    pub fn add_role(&mut self, name: String, kind: RoleKindInput, permissions: Vec<Permission>, mod_level: u32, override_level: u32) {
+    pub fn add_role(&mut self, alias: String, kind: RoleKindInput, permissions: Vec<Permission>, mod_level: u32, override_level: u32) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(None)), "not allowed");
-        let mut role = match self.roles.get(&name) {
+        let hash = bs58::encode(env::sha256((alias.clone() + &env::block_timestamp().to_string()).as_bytes())).into_string();
+        let mut role = match self.roles.get(&hash) {
             Some(v) => panic!("role already exist"),
             None => Role {
+                alias,
                 kind: RoleKind::Everyone,
                 permissions: HashSet::new(),
                 mod_level: if self.get_user_mod_level(&sender_id) < mod_level { mod_level } else { 0 },
@@ -160,7 +214,7 @@ impl Community {
             },
             RoleKindInput::Group => {
                 role.kind = RoleKind::Group(Group { 
-                    members: UnorderedMap::new(format!("{}_member", name).as_bytes()),
+                    members: UnorderedMap::new(format!("{}_member", hash).as_bytes()),
                 })
             },
             RoleKindInput::Access(access) => {
@@ -171,18 +225,31 @@ impl Community {
             role.permissions.insert(permission);
         }
 
-        self.roles.insert(&name, &role);
+        self.roles.insert(&hash, &role);
     }
 
 
 
-    pub fn set_role(&mut self, name: String, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
+    pub fn set_role(&mut self, hash: String, alias: Option<String>, kind: Option<RoleKindInput>, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(Some(name.clone()))), "not allowed");
-        let mut role = match self.roles.get(&name) {
+        assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(Some(hash.clone()))), "not allowed");
+        let mut role = match self.roles.get(&hash) {
             Some(v) => v,
             None => panic!("role not exist")
         };
+
+        if let Some(alias) = alias {
+            role.alias = alias
+        }
+
+        if let Some(kind) = kind {
+            match kind {
+                RoleKindInput::Access(access) => {
+                    role.kind = RoleKind::Access(access)
+                },
+                _ => {}
+            }
+        }
         
         if let Some(mod_level) = mod_level {
             if mod_level < self.get_user_mod_level(&sender_id) {
@@ -199,30 +266,36 @@ impl Community {
                 role.permissions.insert(permission);
             }
         }
-        self.roles.insert(&name, &role);
+        self.roles.insert(&hash, &role);
     }
 
-    pub fn remove_role(&mut self, name: String) {
+    pub fn remove_role(&mut self, hash: String) {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::DelRole(Some(name.clone()))), "not allowed");
-        self.roles.remove(&name);
+        assert!(self.can_execute_action(sender_id.clone(), Permission::DelRole(Some(hash.clone()))), "not allowed");
+        self.roles.remove(&hash);
     }
 
-    pub fn add_member_to_role(&mut self, name: String, member_id: AccountId, map: HashMap<String, String>) {
+    pub fn add_member_to_role(&mut self, hash: String, members: Vec<(AccountId, Option<HashMap<String, String>>)>) {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(name.clone()))), "not allowed");
-        assert!(is_registered(&member_id), "not registered");
-        let mut role = self.roles.get(&name).expect(format!("{} not found", name.as_str()).as_str());
-        role.kind.add_member_to_group(&member_id, &map).unwrap();
-        self.roles.insert(&name, &role);
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))), "not allowed");
+        let mut role = self.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
+        for (account_id, options) in members {
+            if !is_registered(&account_id) {
+                continue
+            }
+            role.kind.add_member_to_group(&account_id, &options.unwrap_or(HashMap::new())).unwrap();
+        }
+        self.roles.insert(&hash, &role);
     }
 
-    pub fn remove_member_from_role(&mut self, name: String, member_id: AccountId) {
+    pub fn remove_member_from_role(&mut self, hash: String, members: Vec<AccountId>) {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(name.clone()))), "not allowed");
-        let mut role = self.roles.get(&name).expect(format!("{} not found", name.as_str()).as_str());
-        role.kind.remove_member_from_group(&member_id).unwrap();
-        self.roles.insert(&name, &role);
+        assert!(self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(hash.clone()))), "not allowed");
+        let mut role = self.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
+        for account_id in members {
+            role.kind.remove_member_from_group(&account_id).unwrap();
+        }
+        self.roles.insert(&hash, &role);
     }
 
     fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {

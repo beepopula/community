@@ -59,7 +59,7 @@ pub enum Relationship {
 
 impl Access {
     pub fn check_account(&self, account_id: &AccountId) -> bool {
-        let accounts: UnorderedMap<AccountId, Account> = UnorderedMap::new(StorageKey::Account);
+        let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
         let account = match accounts.get(account_id) {
             Some(v)  => v,
             None => return false

@@ -6,11 +6,6 @@ use post::Hierarchy;
 
 #[near_bindgen]
 impl Community {
-    pub fn check_follow(&self, followee: AccountId, follower: AccountId) -> bool {
-        let target_hash = env::sha256(&(followee.to_string() + "follwed_by" + &follower.to_string()).into_bytes());
-        //let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
-        self.relationship_tree.check(&target_hash)
-    }
 
     pub fn get_drip(&self, account_id: AccountId) -> U128 {
         self.drip.get_drip(account_id)
@@ -43,12 +38,12 @@ impl Community {
         self.relationship_tree.check(&view_hash)
     }
 
-    pub fn get_reports(&self, account_id: AccountId) -> Vec<Report> {
-        let account = match self.reports.get(&account_id) {
-            Some(v) => v,
-            None => return Vec::new()
-        };
-        account.values().collect()
-    }
+    // pub fn get_reports(&self, account_id: AccountId) -> Vec<Report> {
+    //     let account = match self.reports.get(&account_id) {
+    //         Some(v) => v,
+    //         None => return Vec::new()
+    //     };
+    //     account.values().collect()
+    // }
     
 }

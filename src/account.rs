@@ -113,4 +113,9 @@ impl Account {
         balance -= amount;
         self.data.insert(json!(deposit).to_string(), json!(balance).to_string());
     }
+
+
+////////////////////////////////////////////////////////  Report Part ////////////////////////////////////////////////////////////////
+
+    // pub fn report_deposit(&mut self, amount: )
 }
