@@ -20,6 +20,7 @@ use crate::post::Hierarchy;
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
+use account::Deposit;
 
 
 pub mod utils;
@@ -33,6 +34,7 @@ pub mod role;
 pub mod access;
 pub mod account;
 pub mod resolver;
+pub mod internal;
 
 
 #[near_bindgen]
@@ -40,6 +42,7 @@ pub mod resolver;
 pub struct Community {
     owner_id: AccountId,
     public_key: String,
+    accounts: LookupMap<AccountId, Account>,
     content_tree: BitTree,
     relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
@@ -77,14 +80,17 @@ impl Community {
         let mut this = Self {
             owner_id: owner_id.clone(),
             public_key: public_key,
+            accounts: LookupMap::new(StorageKey::Account),
             content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
             roles: UnorderedMap::new(StorageKey::Roles)
         };
-        this.join();
-        init_roles();
+        let mut account = this.accounts.get(&owner_id).unwrap_or_default();
+        account.set_registered(true);
+        this.accounts.insert(&owner_id, &account);
+        init_roles(&mut this);
         this
     }
 
@@ -100,6 +106,7 @@ impl Community {
         let this = Community {
             owner_id: prev.owner_id,
             public_key: prev.public_key,
+            accounts: LookupMap::new(StorageKey::Account),
             content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(b'r'),
@@ -112,24 +119,34 @@ impl Community {
     #[payable]
     pub fn join(&mut self) {
         let sender_id = env::predecessor_account_id();
-        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-        let mut account = accounts.get(&sender_id).unwrap_or_default();
+        let mut account = self.accounts.get(&sender_id).unwrap_or_default();
         account.set_registered(true);
-        accounts.insert(&sender_id, &account);
+        self.accounts.insert(&sender_id, &account);
     }
 
     #[payable]
     pub fn quit(&mut self) {
         assert_one_yocto();
         let sender_id = env::predecessor_account_id();
-        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-        let account = accounts.get(&sender_id);
+        let account = self.accounts.get(&sender_id);
         if let Some(mut account) = account {
             if account.get_drip() == 0 {
-                accounts.remove(&sender_id);
+                self.accounts.remove(&sender_id);
             } else {
                 account.set_registered(true);
             }
+        }
+    }
+
+    pub fn withdraw(&mut self, deposit: Deposit, amount: U128) {
+        let sender_id = env::predecessor_account_id();
+        match deposit {
+            Deposit::FT(account_id) => {
+                let mut account = self.accounts.get(&sender_id).unwrap_or_default();
+                account.decrease_deposit(Deposit::FT(account_id), amount.0);
+                self.accounts.insert(&sender_id, &account);
+            }
+            _ => {}
         }
     }
 

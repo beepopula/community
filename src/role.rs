@@ -20,7 +20,7 @@ use near_sdk::{env, AccountId, Balance};
 #[derive(BorshSerialize, BorshDeserialize)]
 #[derive(Debug)]
 pub struct Group {
-    members: UnorderedMap<AccountId, HashMap<String, String>>,
+    pub members: UnorderedMap<AccountId, HashMap<String, String>>,
 }
 
 // member keys:
@@ -137,8 +137,7 @@ pub enum Permission {
     Other(String)   //off-chain permission
 }
 
-pub fn init_roles() {
-    let mut roles = UnorderedMap::new(StorageKey::Roles);
+pub fn init_roles(this: &mut Community) {
     let mut permissions = HashSet::new();
     permissions.insert(Permission::AddContent(0));
     permissions.insert(Permission::AddContent(1));
@@ -151,15 +150,15 @@ pub fn init_roles() {
     permissions.insert(Permission::Like);
     permissions.insert(Permission::Unlike);
     permissions.insert(Permission::Report);
-    roles.insert(&"all".to_string(), &Role { 
+    this.roles.insert(&"all".to_string(), &Role { 
         alias: "all".to_string(),
         kind: RoleKind::Everyone, 
         permissions:  permissions.clone(),
         mod_level: 0,
         override_level: 0
     });
-    roles.insert(&"assistance".to_string(), &Role { 
-        alias: "all".to_string(),
+    this.roles.insert(&"assistance".to_string(), &Role { 
+        alias: "assistance".to_string(),
         kind: RoleKind::Group(Group {
             members: UnorderedMap::new("assistance_member".as_bytes())
         }), 
@@ -169,7 +168,7 @@ pub fn init_roles() {
     });
     permissions.insert(Permission::SetRole(Some("all".to_string())));
     permissions.insert(Permission::Other("ManageInfo".to_string()));
-    roles.insert(&"mod".to_string(), &Role { 
+    this.roles.insert(&"mod".to_string(), &Role { 
         alias: "mod".to_string(),
         kind: RoleKind::Group(Group {
             members: UnorderedMap::new("mod_member".as_bytes())
@@ -178,8 +177,8 @@ pub fn init_roles() {
         mod_level: 2,
         override_level: 0
     });
-    roles.insert(&"ban".to_string(), &Role { 
-        alias: "all".to_string(),
+    this.roles.insert(&"ban".to_string(), &Role { 
+        alias: "ban".to_string(),
         kind: RoleKind::Group(Group {
             members: UnorderedMap::new("ban_member".as_bytes())
         }), 

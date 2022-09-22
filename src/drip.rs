@@ -16,7 +16,7 @@ pub struct Drip {
     accounts: LookupMap<AccountId, Account>,  
 }
 
-fn get_map_value(key: &String) -> u128 {
+pub fn get_map_value(key: &String) -> u128 {
     let map: HashMap<String, U128> = serde_json::from_str(&json!({
         "content0": "200000000000000000000000",    //post                       active
         "content1": "200000000000000000000000",    //comment                    active

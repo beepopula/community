@@ -1,21 +1,95 @@
-use near_non_transferrable_token::fungible_token::receiver::FungibleTokenReceiver;
+use near_non_transferrable_token::fungible_token::receiver::FungibleTokenReceiver as NtftReceiver;
+use near_non_transferrable_token::fungible_token::core::TokenSource;
+
+use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as FtReceiver;
 
 use crate::*;
+use crate::account::Deposit;
+use crate::drip::get_map_value;
 use near_sdk::PromiseOrValue;
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub enum MsgInput {
+    Report(ReportInput),
+    Deposit(Deposit)
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct ReportInput {
+    hierarchies: Vec<Hierarchy>,
+    reason: String
+}
+
 #[near_bindgen]
-impl FungibleTokenReceiver for Community {
+impl FtReceiver for Community {
 
-    fn ft_on_deposit(&mut self,owner_id:AccountId,contract_id:AccountId,token_source:Option<near_non_transferrable_token::fungible_token::core::TokenSource> ,amount:U128,msg:String,) -> PromiseOrValue<U128>  {
-        todo!()
+    fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
+        let msg_input = serde_json::from_str(&msg).unwrap();
+        match msg_input {
+            MsgInput::Deposit(deposit) => {
+                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+                let mut account = accounts.get(&sender_id).unwrap_or_default();
+                match deposit {
+                    Deposit::FT(account_id) => {
+                        account.increase_deposit(Deposit::FT(account_id), amount.0);
+                        accounts.insert(&sender_id, &account);
+                        PromiseOrValue::Value(0.into())
+                    }
+                    _ => {PromiseOrValue::Value(amount)}
+                }
+            },
+            _ => {PromiseOrValue::Value(amount)}
+        }
+    }
+
+}
+
+
+#[near_bindgen]
+impl NtftReceiver for Community {
+
+    fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource> ,amount: U128, msg: String,) -> PromiseOrValue<U128>  {
+        let msg_input = serde_json::from_str(&msg).unwrap();
+        match msg_input {
+            MsgInput::Deposit(deposit) => {
+                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+                let mut account = accounts.get(&owner_id).unwrap_or_default();
+                match deposit {
+                    Deposit::Drip(account_id) => {
+                        assert!(account_id == contract_id, "wrong drip");
+                        account.increase_deposit(Deposit::FT(account_id), amount.0);
+                        accounts.insert(&owner_id, &account);
+                        PromiseOrValue::Value(0.into())
+                    },
+                    _ => {PromiseOrValue::Value(amount)}
+                }
+            },
+            _ => {PromiseOrValue::Value(amount)}
+        }
     }
 
 
-    fn ft_on_burn(&mut self,owner_id:AccountId,contract_id:AccountId,token_source:Option<near_non_transferrable_token::fungible_token::core::TokenSource> ,amount:U128,msg:String) -> PromiseOrValue<U128>  {
-        todo!()
+    #[payable]
+    fn ft_on_burn(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource> ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
+        let msg_input = serde_json::from_str(&msg).unwrap();
+        match msg_input {
+            MsgInput::Report(report_input) => {
+                assert!(contract_id == env::current_account_id(), "wrong drip");
+                let need_amount = get_map_value(&"report".to_string());
+                assert!(amount.0 >= need_amount, "not enough drip");
+                self.internal_report(owner_id, report_input.hierarchies);
+                PromiseOrValue::Value((amount.0 - need_amount).into())
+            },
+            _ => {PromiseOrValue::Value(amount)}
+        }
+        
     }
 
-    fn ft_on_withdraw(&mut self,owner_id:AccountId,contract_id:AccountId,token_source:Option<near_non_transferrable_token::fungible_token::core::TokenSource> ,amount:U128,msg:String,) -> PromiseOrValue<U128>  {
+    fn ft_on_withdraw(&mut self,owner_id:AccountId,contract_id:AccountId,token_source:Option<TokenSource> ,amount:U128,msg:String,) -> PromiseOrValue<U128>  {
         todo!()
     }
 

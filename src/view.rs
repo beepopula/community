@@ -1,8 +1,23 @@
 use std::collections::HashMap;
 
 use crate::*;
+use crate::role::RoleKindInput;
 use utils::get_content_hash;
 use post::Hierarchy;
+use account::Deposit;
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug)]
+pub struct RoleOutput {
+    pub alias: String,
+    pub kind: RoleKindInput,
+    pub permissions: HashSet<Permission>,
+    pub mod_level: u32,
+    pub override_level: u32  
+}
+
+
 
 #[near_bindgen]
 impl Community {
@@ -36,6 +51,33 @@ impl Community {
         let view_hash = env::sha256(&(account_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
         //let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
         self.relationship_tree.check(&view_hash)
+    }
+
+    pub fn get_roles(&self) -> HashMap<String, RoleOutput> {
+        let mut roles = HashMap::new();
+        for (hash, role) in self.roles.iter() {
+            roles.insert(hash, RoleOutput { 
+                alias: role.alias, 
+                kind: match role.kind {
+                    RoleKind::Everyone => RoleKindInput::Everyone,
+                    RoleKind::Group(_) => RoleKindInput::Group,
+                    RoleKind::Access(access) => RoleKindInput::Access(access)
+                }, 
+                permissions: role.permissions, 
+                mod_level: role.mod_level, 
+                override_level: role.override_level 
+            });
+        }
+        roles
+    }
+
+    pub fn get_deposit(&self, account_id: AccountId, deposit: Deposit) -> U128{
+        match self.accounts.get(&account_id) {
+            Some(account) => {
+                account.get_deposit(&deposit).into()
+            },
+            None => 0.into()
+        }
     }
 
     // pub fn get_reports(&self, account_id: AccountId) -> Vec<Report> {

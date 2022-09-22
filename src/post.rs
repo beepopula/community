@@ -47,15 +47,14 @@ pub struct Hierarchy {
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 #[derive(Debug, Clone)]
-pub struct Report {
-    pub hierarchies: Vec<Hierarchy>,
-    pub timestamp: U64,
-    pub deposit: U128,
-    pub del: Option<bool>
+pub enum Report {
+    Approve,
+    Disapprove,
+    Ignore
 }
 
 
-const REPORT_DEPOSIT: u128 = 5_000_000_000_000_000_000_000_000;
+pub const REPORT_DEPOSIT: u128 = 5_000_000_000_000_000_000_000_000;
 
 
 #[near_bindgen]
@@ -231,28 +230,7 @@ impl Community {
         );
     }
 
-
-    #[payable]
-    pub fn report(&mut self, hierarchies: Vec<Hierarchy>) {
-        assert!( REPORT_DEPOSIT <= env::attached_deposit(), "not enough deposit");
-
-        let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::Report), "not allowed");
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
-        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-
-        let mut report_accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
-        if report_accounts.len() >= 10 {
-            return
-        }
-        report_accounts.insert(sender_id);
-        self.reports.insert(&hierarchy_hash, &report_accounts);
-    }
-
-    pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, del: Option<bool>) {
+    pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, report: Report) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
 
@@ -262,22 +240,23 @@ impl Community {
         };
 
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        let mut accounts = self.reports.get(&hierarchy_hash).unwrap();
-        match del {
-            Some(del) => {
-                if del == true {
-                    self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
-                    for account_id in accounts {
-                        if account_id == sender_id {
-                            continue
-                        }
-                        self.drip.set_report_drip(hierarchies.clone(), account_id);
+        let accounts = self.reports.get(&hierarchy_hash).unwrap();
+        match report {
+            Report::Approve => {
+                self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
+                for account_id in accounts {
+                    if account_id == sender_id {
+                        continue
                     }
-                    
-                    self.drip.set_report_confirm_drip(sender_id);
+                    self.drip.set_report_drip(hierarchies.clone(), account_id);
                 }
+                
+                self.drip.set_report_confirm_drip(sender_id);
             },
-            None => {
+            Report::Disapprove => {
+
+            },
+            Report::Ignore => {
                 for account_id in accounts {
                     if account_id == sender_id {
                         continue
