@@ -102,6 +102,8 @@ impl Drip {
 
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
         per = account.get_account_decay() * per / 100;
+        account.increase_content_count();
+        self.accounts.insert(&account_id, &account);
         
         let items = self.set_drip(key, None, &account_id, per); 
         [drip_items, items].concat()

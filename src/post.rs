@@ -54,9 +54,6 @@ pub enum Report {
 }
 
 
-pub const REPORT_DEPOSIT: u128 = 5_000_000_000_000_000_000_000_000;
-
-
 #[near_bindgen]
 impl Community {
 

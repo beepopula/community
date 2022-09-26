@@ -34,8 +34,9 @@ impl FtReceiver for Community {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = accounts.get(&sender_id).unwrap_or_default();
                 match deposit {
-                    Deposit::FT(account_id) => {
-                        account.increase_deposit(Deposit::FT(account_id), amount.0);
+                    Deposit::FT(token_id) => {
+                        assert!(token_id == env::predecessor_account_id(), "wrong drip");
+                        account.increase_deposit(Deposit::FT(token_id), amount.0);
                         accounts.insert(&sender_id, &account);
                         PromiseOrValue::Value(0.into())
                     }
@@ -52,15 +53,15 @@ impl FtReceiver for Community {
 #[near_bindgen]
 impl NtftReceiver for Community {
 
-    fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource> ,amount: U128, msg: String,) -> PromiseOrValue<U128>  {
+    fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource> ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Deposit(deposit) => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = accounts.get(&owner_id).unwrap_or_default();
                 match deposit {
-                    Deposit::Drip(account_id) => {
-                        assert!(account_id == contract_id, "wrong drip");
+                    Deposit::Drip((token_id, account_id)) => {
+                        assert!(token_id == env::predecessor_account_id() && account_id == contract_id, "wrong drip");
                         account.increase_deposit(Deposit::FT(account_id), amount.0);
                         accounts.insert(&owner_id, &account);
                         PromiseOrValue::Value(0.into())
@@ -79,7 +80,7 @@ impl NtftReceiver for Community {
         match msg_input {
             MsgInput::Report(report_input) => {
                 assert!(contract_id == env::current_account_id(), "wrong drip");
-                let need_amount = get_map_value(&"report".to_string());
+                let need_amount = get_map_value(&"report_refund".to_string());
                 assert!(amount.0 >= need_amount, "not enough drip");
                 self.internal_report(owner_id, report_input.hierarchies);
                 PromiseOrValue::Value((amount.0 - need_amount).into())
@@ -89,8 +90,33 @@ impl NtftReceiver for Community {
         
     }
 
-    fn ft_on_withdraw(&mut self,owner_id:AccountId,contract_id:AccountId,token_source:Option<TokenSource> ,amount:U128,msg:String,) -> PromiseOrValue<U128>  {
-        todo!()
+    fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource>, amount: U128) -> PromiseOrValue<U128>  {
+        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+        let mut account = match accounts.get(&owner_id) {
+            Some(account) => account,
+            None => return PromiseOrValue::Value(amount)
+        };
+        account.decrease_deposit(Deposit::Drip((env::predecessor_account_id(), contract_id)), amount.0);
+        PromiseOrValue::Value(0.into())
     }
 
+}
+
+
+#[cfg(test)]
+mod test {
+    use near_sdk::serde_json::json;
+
+    use super::{MsgInput, ReportInput};
+
+
+    #[test]
+    fn test() {
+        let msg_input = MsgInput::Report(ReportInput {
+            hierarchies: vec![],
+            reason: "".to_string(),
+        });
+        print!("{:?}", json!(msg_input).to_string());
+
+    }
 }

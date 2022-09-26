@@ -30,6 +30,10 @@ impl Community {
         self.drip.get_account_decay(account_id)
     }
 
+    pub fn get_account(&self, account_id: AccountId) -> HashMap<String, String> {
+        self.accounts.get(&account_id).unwrap().data
+    }
+
     pub fn get_content_decay(&self, hierarchies: Vec<Hierarchy>) -> u32 {
         let mut content_count = 0;
         if hierarchies.len() > 0 {
