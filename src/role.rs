@@ -297,7 +297,7 @@ impl Community {
         self.roles.insert(&hash, &role);
     }
 
-    fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {
+    pub fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {
         let mut max_override_level = 0;
         for (name, role) in self.roles.iter() {
             if role.override_level > max_override_level && role.kind.match_user(&account_id) {

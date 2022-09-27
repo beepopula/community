@@ -231,6 +231,9 @@ impl Community {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
 
+        let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
+        assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
+
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
