@@ -173,7 +173,9 @@ pub fn init_roles(this: &mut Community) {
 #[near_bindgen]
 impl Community {
 
+    #[payable]
     pub fn add_role(&mut self, alias: String, kind: RoleKindInput, permissions: Vec<Permission>, mod_level: u32, override_level: u32) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(None)), "not allowed");
         let hash = bs58::encode(env::sha256((alias.clone() + &env::block_timestamp().to_string()).as_bytes())).into_string();
@@ -206,6 +208,8 @@ impl Community {
         }
 
         self.roles.insert(&hash, &role);
+
+        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
     }
 
 
@@ -256,7 +260,9 @@ impl Community {
         self.roles.remove(&hash);
     }
 
+    #[payable]
     pub fn add_member_to_role(&mut self, hash: String, members: Vec<(AccountId, Option<HashMap<String, String>>)>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))), "not allowed");
         let mut role = self.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
@@ -267,6 +273,7 @@ impl Community {
             role.kind.add_member_to_group(&account_id, &options.unwrap_or(HashMap::new())).unwrap();
         }
         self.roles.insert(&hash, &role);
+        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
     }
 
     pub fn remove_member_from_role(&mut self, hash: String, members: Vec<AccountId>) {
