@@ -280,6 +280,9 @@ impl Community {
     }
 
     pub fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {
+        if *account_id == self.owner_id {
+            return u32::MAX
+        }
         let mut max_override_level = 0;
         for (name, role) in self.roles.iter() {
             if role.override_level > max_override_level && role.kind.match_user(&account_id) {
@@ -374,6 +377,9 @@ impl Community {
 
 
     fn check_allowed(&self, permission: &Permission, permissions: &HashSet<Permission>, account_id: &AccountId) -> bool {
+        if *account_id == self.owner_id {
+            return true
+        }
         match permission {
             Permission::SetRole(name) => {
                 let allowed = permissions.contains(&permission) || permissions.contains(&Permission::SetRole(None));
