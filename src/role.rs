@@ -130,6 +130,7 @@ pub enum Permission {
 
 
     ReportConfirm,
+    DelOthersContent,
     SetRole(Option<String>),
     DelRole(Option<String>),
     AddMember(Option<String>),
@@ -155,26 +156,6 @@ pub fn init_roles(this: &mut Community) {
         kind: RoleKind::Everyone, 
         permissions:  permissions.clone(),
         mod_level: 0,
-        override_level: 0
-    });
-    this.roles.insert(&"assistance".to_string(), &Role { 
-        alias: "assistance".to_string(),
-        kind: RoleKind::Group(Group {
-            members: UnorderedMap::new("assistance_member".as_bytes())
-        }), 
-        permissions:  permissions.clone(),
-        mod_level: 1,
-        override_level: 0
-    });
-    permissions.insert(Permission::SetRole(Some("all".to_string())));
-    permissions.insert(Permission::Other("ManageInfo".to_string()));
-    this.roles.insert(&"mod".to_string(), &Role { 
-        alias: "mod".to_string(),
-        kind: RoleKind::Group(Group {
-            members: UnorderedMap::new("mod_member".as_bytes())
-        }), 
-        permissions:  permissions,
-        mod_level: 2,
         override_level: 0
     });
     this.roles.insert(&"ban".to_string(), &Role { 
@@ -269,6 +250,7 @@ impl Community {
     }
 
     pub fn remove_role(&mut self, hash: String) {
+        Base58CryptoHash::try_from(hash.clone()).unwrap();    //exclude "all" and "ban"
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelRole(Some(hash.clone()))), "not allowed");
         self.roles.remove(&hash);

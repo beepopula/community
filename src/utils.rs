@@ -47,8 +47,8 @@ pub(crate) fn check_encrypt_args(text: Option<String>, imgs: Option<String>, vid
     assert!(text.is_some() || imgs.is_some() || video.is_some() || audio.is_some(), "at least one field");
 }
 
-pub(crate) fn get_parent_contract_id() -> AccountId {
-    let current_id = env::current_account_id().to_string();
+pub(crate) fn get_parent_contract_id(contract_id: AccountId) -> AccountId {
+    let current_id = contract_id.to_string();
     let index = current_id.find('.').unwrap();
     let parent_id = current_id[index + 1..].to_string();
     AccountId::try_from(parent_id).unwrap()

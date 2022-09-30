@@ -35,7 +35,7 @@ impl Community {
 #[no_mangle]
 pub extern "C" fn upgrade() {
     env::setup_panic_hook();
-    assert!(get_parent_contract_id() == env::predecessor_account_id(), "contract's parent only");
+    assert!(get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "contract's parent only");
     let input = env::input().unwrap();
     Promise::new(env::current_account_id()).deploy_contract(input);
 }

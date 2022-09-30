@@ -6,6 +6,7 @@ use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as 
 use crate::*;
 use crate::account::Deposit;
 use crate::drip::get_map_value;
+use crate::utils::get_parent_contract_id;
 use near_sdk::PromiseOrValue;
 
 #[derive(Serialize, Deserialize)]
@@ -79,6 +80,7 @@ impl NtftReceiver for Community {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Report(report_input) => {
+                assert!(get_parent_contract_id(env::current_account_id()) == get_parent_contract_id(env::predecessor_account_id()), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_refund".to_string());
                 assert!(amount.0 >= need_amount, "not enough drip");

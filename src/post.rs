@@ -240,10 +240,11 @@ impl Community {
         };
 
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        let accounts = self.reports.get(&hierarchy_hash).unwrap();
+        let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
         match report {
             Report::Approve => {
                 self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
+                Event::log_del_content(hierarchies.clone(), None);
                 for account_id in accounts {
                     if account_id == sender_id {
                         continue
@@ -266,5 +267,21 @@ impl Community {
             }
         }
         
+    }
+
+    pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
+        let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::DelOthersContent), "not allowed");
+
+        let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
+        assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
+        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
+            Some(v) => v,
+            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
+        };
+        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
+
+        self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
+        Event::log_del_content(hierarchies, None);
     }
 }
