@@ -174,7 +174,7 @@ pub fn init_roles(this: &mut Community) {
 impl Community {
 
     #[payable]
-    pub fn add_role(&mut self, alias: String, kind: RoleKindInput, permissions: Vec<Permission>, mod_level: u32, override_level: u32) {
+    pub fn add_role(&mut self, alias: String, kind: RoleKindInput, permissions: Vec<Permission>, mod_level: u32, override_level: u32) -> String {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(None)), "not allowed");
@@ -210,11 +210,14 @@ impl Community {
         self.roles.insert(&hash, &role);
 
         refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
+
+        hash
     }
 
 
-
+    #[payable]
     pub fn set_role(&mut self, hash: String, alias: Option<String>, kind: Option<RoleKindInput>, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(Some(hash.clone()))), "not allowed");
         let mut role = match self.roles.get(&hash) {
@@ -231,7 +234,14 @@ impl Community {
                 RoleKindInput::Access(access) => {
                     role.kind = RoleKind::Access(access)
                 },
-                _ => {}
+                RoleKindInput::Group => {
+                    role.kind = RoleKind::Group(Group { 
+                        members: UnorderedMap::new(format!("{}_member", hash).as_bytes()),
+                    })
+                },
+                RoleKindInput::Everyone => {
+                    role.kind = RoleKind::Everyone
+                },
             }
         }
         
@@ -251,6 +261,7 @@ impl Community {
             }
         }
         self.roles.insert(&hash, &role);
+        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
     }
 
     pub fn remove_role(&mut self, hash: String) {
