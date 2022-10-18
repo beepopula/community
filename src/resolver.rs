@@ -1,5 +1,4 @@
 use near_non_transferrable_token::fungible_token::receiver::FungibleTokenReceiver as NtftReceiver;
-use near_non_transferrable_token::fungible_token::core::TokenSource;
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as FtReceiver;
 
@@ -54,7 +53,7 @@ impl FtReceiver for Community {
 #[near_bindgen]
 impl NtftReceiver for Community {
 
-    fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource> ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
+    fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Deposit(deposit) => {
@@ -76,11 +75,11 @@ impl NtftReceiver for Community {
 
 
     #[payable]
-    fn ft_on_burn(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource> ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
+    fn ft_on_burn(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Report(report_input) => {
-                assert!(get_parent_contract_id(env::current_account_id()) == get_parent_contract_id(env::predecessor_account_id()), "wrong token id");
+                assert!(AccountId::from_str(self.args.get("drip_contract").unwrap()).unwrap() == env::predecessor_account_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_refund".to_string());
                 assert!(amount.0 >= need_amount, "not enough drip");
@@ -92,7 +91,7 @@ impl NtftReceiver for Community {
         
     }
 
-    fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, token_source: Option<TokenSource>, amount: U128) -> PromiseOrValue<U128>  {
+    fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, amount: U128) -> PromiseOrValue<U128>  {
         let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
         let mut account = match accounts.get(&owner_id) {
             Some(account) => account,

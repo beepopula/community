@@ -117,7 +117,7 @@ impl Community {
     pub fn add_encrypt_content(&mut self, encrypt_args: String, access: Option<Access>, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>, nonce: String, sign: String) -> Base58CryptoHash {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
-        let pk: Vec<u8> = bs58::decode(self.public_key.clone()).into_vec().unwrap();
+        let pk: Vec<u8> = bs58::decode(self.args.get("public_key").unwrap().clone()).into_vec().unwrap();
 
         let hash = env::sha256(&(encrypt_args.clone() + &nonce).into_bytes());
         let sign: Vec<u8> = bs58::decode(sign).into_vec().unwrap();

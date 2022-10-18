@@ -3,23 +3,23 @@ use utils::get_parent_contract_id;
 
 #[near_bindgen]
 impl Community {
-    pub fn get_public_key(&self) -> String {
-        self.public_key.clone()
+    pub fn get_args(&self) -> HashMap<String, String> {
+        self.args.clone()
     }
 
     #[payable]
-    pub fn set_public_key(&mut self, public_key: String) {
+    pub fn set_args(&mut self, args: HashMap<String, String>) {
         assert_one_yocto();
         let sender = env::predecessor_account_id();
-        assert!(sender == self.owner_id, "owner only");
-        self.public_key = public_key;
+        assert!(sender == self.owner_id || get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "owner only");
+        self.args = args
     }
 
     #[payable]
     pub fn set_owner(&mut self, account_id: AccountId) {
         assert_one_yocto();
         let sender = env::predecessor_account_id();
-        assert!(sender == self.owner_id, "owner only");
+        assert!(sender == self.owner_id || get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "owner only");
         self.owner_id = account_id;
     }
 
@@ -27,7 +27,7 @@ impl Community {
     pub fn del_contract(&mut self) {
         assert_one_yocto();
         let sender = env::predecessor_account_id();
-        assert!(sender == self.owner_id, "owner only");
+        assert!(sender == self.owner_id || get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "owner only");
         Promise::new(env::current_account_id()).delete_account(sender);
     }
 }

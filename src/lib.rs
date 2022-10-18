@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
+use std::str::FromStr;
 
 use account::Account;
 use near_fixed_bit_tree::BitTree;
@@ -41,24 +42,13 @@ pub mod internal;
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Community {
     owner_id: AccountId,
-    public_key: String,
+    args: HashMap<String, String>,
     accounts: LookupMap<AccountId, Account>,
     content_tree: BitTree,
     relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
     roles: UnorderedMap<String, Role>
-}
-
-#[derive(BorshSerialize, BorshDeserialize)]
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-pub struct Value(Vec<(u8, u16)>);
-
-impl Value {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
 }
 
 
@@ -76,10 +66,10 @@ pub enum StorageKey {
 impl Community {
 
     #[init]
-    pub fn new(owner_id: AccountId, public_key: String) -> Self {
+    pub fn new(owner_id: AccountId, args: HashMap<String, String>) -> Self {
         let mut this = Self {
             owner_id: owner_id.clone(),
-            public_key: public_key,
+            args,
             accounts: LookupMap::new(StorageKey::Account),
             content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
             relationship_tree: BitTree::new(28, vec![1], 0),
@@ -105,7 +95,7 @@ impl Community {
         
         let this = Community {
             owner_id: prev.owner_id,
-            public_key: prev.public_key,
+            args: prev.args,
             accounts: LookupMap::new(StorageKey::Account),
             content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
             relationship_tree: BitTree::new(28, vec![1], 0),

@@ -3,6 +3,7 @@ use crate::access::{FTCondition, Condition};
 use crate::account::Deposit;
 use crate::utils::is_registered;
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{U128, U64};
@@ -20,7 +21,7 @@ use near_sdk::{env, AccountId, Balance};
 #[derive(BorshSerialize, BorshDeserialize)]
 #[derive(Debug)]
 pub struct Group {
-    pub members: UnorderedMap<AccountId, HashMap<String, String>>,
+    pub members: LookupMap<AccountId, HashMap<String, String>>,
 }
 
 // member keys:
@@ -73,13 +74,13 @@ impl RoleKind {
         }
     }
 
-    /// Returns the number of people in the this role or None if not supported role kind.
-    pub fn get_role_size(&self) -> Option<usize> {
-        match self {
-            RoleKind::Group(group) => Some(group.members.len() as usize),
-            _ => None,
-        }
-    }
+    // /// Returns the number of people in the this role or None if not supported role kind.
+    // pub fn get_role_size(&self) -> Option<usize> {
+    //     match self {
+    //         RoleKind::Group(group) => Some(env::storage_read() as usize),
+    //         _ => None,
+    //     }
+    // }
 
     pub fn add_member_to_group(&mut self, member_id: &AccountId, map: &HashMap<String, String>) -> Result<(), ()> {
         match self {
@@ -161,7 +162,7 @@ pub fn init_roles(this: &mut Community) {
     this.roles.insert(&"ban".to_string(), &Role { 
         alias: "ban".to_string(),
         kind: RoleKind::Group(Group {
-            members: UnorderedMap::new("ban_member".as_bytes())
+            members: LookupMap::new("ban_member".as_bytes())
         }), 
         permissions:  HashSet::new(),
         mod_level: 0,
@@ -196,7 +197,7 @@ impl Community {
             },
             RoleKindInput::Group => {
                 role.kind = RoleKind::Group(Group { 
-                    members: UnorderedMap::new(format!("{}_member", hash).as_bytes()),
+                    members: LookupMap::new(format!("{}_member", hash).as_bytes()),
                 })
             },
             RoleKindInput::Access(access) => {
@@ -235,9 +236,8 @@ impl Community {
                     role.kind = RoleKind::Access(access)
                 },
                 RoleKindInput::Group => {
-                    role.kind = RoleKind::Group(Group { 
-                        members: UnorderedMap::new(format!("{}_member", hash).as_bytes()),
-                    })
+                    let prefix = format!("{}_member", hash);
+                    
                 },
                 RoleKindInput::Everyone => {
                     role.kind = RoleKind::Everyone
@@ -302,14 +302,14 @@ impl Community {
             return u32::MAX
         }
         let mut max_override_level = 0;
-        for (name, role) in self.roles.iter() {
+        for (hash, role) in self.roles.iter() {
             if role.override_level > max_override_level && role.kind.match_user(&account_id) {
                 max_override_level = role.override_level
             }
 
         }
         let mut max_mod_level = 0;
-        for (name, role) in self.roles.iter() {
+        for (hash, role) in self.roles.iter() {
             if role.override_level >= max_override_level && role.kind.match_user(&account_id) {
                 if role.mod_level > max_mod_level {
                     max_mod_level = role.mod_level;
@@ -320,18 +320,18 @@ impl Community {
     }
 
     /// Returns set of roles that this user is member of permissions for given user across all the roles it's member of.
-    fn get_user_roles(&self, account_id: &AccountId) -> HashMap<String, HashSet<Permission>> {
+    pub fn get_user_roles(&self, account_id: &AccountId) -> HashMap<String, HashSet<Permission>> {
         let mut roles = HashMap::default();
         let mut max_override_level = 0;
-        for (name, role) in self.roles.iter() {
+        for (hash, role) in self.roles.iter() {
             if role.override_level > max_override_level && role.kind.match_user(&account_id) {
                 max_override_level = role.override_level
             }
 
         }
-        for (name, role) in self.roles.iter() {
+        for (hash, role) in self.roles.iter() {
             if role.override_level >= max_override_level && role.kind.match_user(&account_id) {
-                roles.insert(name.clone(), role.permissions.clone());
+                roles.insert(hash.clone(), role.permissions.clone());
             }
         }
         roles
@@ -393,37 +393,36 @@ impl Community {
         allowed_roles
     }
 
-
     fn check_allowed(&self, permission: &Permission, permissions: &HashSet<Permission>, account_id: &AccountId) -> bool {
         if *account_id == self.owner_id {
             return true
         }
         match permission {
-            Permission::SetRole(name) => {
+            Permission::SetRole(hash) => {
                 let allowed = permissions.contains(&permission) || permissions.contains(&Permission::SetRole(None));
-                allowed && match name {
-                    Some(name) => self.roles.get(name).unwrap().mod_level < self.get_user_mod_level(&account_id),
+                allowed && match hash {
+                    Some(hash) => self.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
                     None => true,
                 }
             },
-            Permission::DelRole(name) => {
+            Permission::DelRole(hash) => {
                 let allowed = permissions.contains(&permission) || permissions.contains(&Permission::DelRole(None));
-                allowed && match name {
-                    Some(name) => self.roles.get(name).unwrap().mod_level < self.get_user_mod_level(&account_id),
+                allowed && match hash {
+                    Some(hash) => self.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
                     None => true,
                 }
             },
-            Permission::AddMember(name) => {
+            Permission::AddMember(hash) => {
                 let allowed = permissions.contains(&permission) || permissions.contains(&Permission::AddMember(None));
-                allowed && match name {
-                    Some(name) => self.roles.get(name).unwrap().mod_level < self.get_user_mod_level(&account_id),
+                allowed && match hash {
+                    Some(hash) => self.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
                     None => true,
                 }
             },
-            Permission::RemoveMember(name) => {
+            Permission::RemoveMember(hash) => {
                 let allowed = permissions.contains(&permission) || permissions.contains(&Permission::RemoveMember(None));
-                allowed && match name {
-                    Some(name) => self.roles.get(name).unwrap().mod_level < self.get_user_mod_level(&account_id),
+                allowed && match hash {
+                    Some(hash) => self.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
                     None => true,
                 }
             },
