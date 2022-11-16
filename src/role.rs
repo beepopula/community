@@ -261,7 +261,11 @@ impl Community {
             }
         }
         self.roles.insert(&hash, &role);
-        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
+        let storage_usage = match env::storage_usage().checked_sub(initial_storage_usage) {
+            Some(storage_usage) => storage_usage,
+            None => 0,
+        };
+        refund_extra_storage_deposit(storage_usage, 0);
     }
 
     pub fn remove_role(&mut self, hash: String) {
@@ -295,6 +299,50 @@ impl Community {
             role.kind.remove_member_from_group(&account_id).unwrap();
         }
         self.roles.insert(&hash, &role);
+    }
+
+    #[payable]
+    pub fn set_members(&mut self, add: HashMap<String, Vec<AccountId>>, remove: HashMap<String, Vec<AccountId>>) {
+        let initial_storage_usage = env::storage_usage();
+        let sender_id = env::predecessor_account_id();
+        for (hash, members) in add.iter() {
+            if !self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))) {
+                continue
+            }
+            let mut role = match self.roles.get(&hash) {
+                Some(role) => role,
+                None => continue,
+            };
+            for account_id in members {
+                if !is_registered(&account_id) {
+                    continue
+                }
+                role.kind.add_member_to_group(&account_id, &HashMap::new()).unwrap();
+            }
+            self.roles.insert(&hash, &role);
+        }
+
+        for (hash, members) in remove.iter() {
+            if !self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(hash.clone()))) {
+                continue
+            }
+            let mut role = match self.roles.get(&hash) {
+                Some(role) => role,
+                None => continue,
+            };
+            for account_id in members {
+                if !is_registered(&account_id) {
+                    continue
+                }
+                role.kind.remove_member_from_group(&account_id).unwrap();
+            }
+            self.roles.insert(&hash, &role);
+        }
+        let storage_usage = match env::storage_usage().checked_sub(initial_storage_usage) {
+            Some(storage_usage) => storage_usage,
+            None => 0,
+        };
+        refund_extra_storage_deposit(storage_usage, 0);
     }
 
     pub fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {

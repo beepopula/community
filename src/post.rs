@@ -43,6 +43,14 @@ pub struct Hierarchy {
     pub options: Option<HashMap<String, String>>
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct InputArgs {
+    hierarchies: Vec<Hierarchy>, 
+    options: Option<HashMap<String, String>>
+}
+
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -241,18 +249,24 @@ impl Community {
 
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
+        let mut drips = vec![];
         match report {
             Report::Approve => {
                 self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
-                Event::log_del_content(hierarchies.clone(), None);
                 for account_id in accounts {
                     if account_id == sender_id {
                         continue
                     }
-                    self.drip.set_report_drip(hierarchies.clone(), account_id);
+                    drips = self.drip.set_report_drip(hierarchies.clone(), account_id);
                 }
+                Event::log_del_content(
+                    hierarchies,
+                    Some(json!({
+                        "drips": drips
+                    }).to_string())
+                );
                 
-                self.drip.set_report_confirm_drip(sender_id);
+                //self.drip.set_report_confirm_drip(sender_id);
             },
             Report::Disapprove => {
 
@@ -262,8 +276,13 @@ impl Community {
                     if account_id == sender_id {
                         continue
                     }
-                    self.drip.set_report_drip(hierarchies.clone(), account_id);
+                    drips = self.drip.set_report_refund_drip(hierarchies.clone(), account_id);
                 }
+                Event::log_refund(
+                    Some(json!({
+                        "drips": drips
+                    }).to_string())
+                );
             }
         }
         
@@ -284,4 +303,48 @@ impl Community {
         self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
         Event::log_del_content(hierarchies, None);
     }
+}
+
+
+#[no_mangle]
+pub extern "C" fn add_long_content() -> Base58CryptoHash {
+    let raw_input = env::input().unwrap();
+    let args_length = u32::try_from_slice(&raw_input[0..4]).unwrap();
+    let args: InputArgs = serde_json::from_slice(&raw_input[5..(args_length as usize + 5)]).unwrap();
+    let hierarchies = args.hierarchies.clone();
+    let options = args.options.clone();
+    let sender_id = env::predecessor_account_id();
+    let mut contract: Community = env::state_read().unwrap();
+    assert!(contract.can_execute_action(sender_id.clone(), Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+
+    assert!(hierarchies.len() < MAX_LEVEL, "error");
+
+    let hash_prefix = get_content_hash(hierarchies.clone(), None, &contract.content_tree).expect("content not found");
+    let target_hash = set_content(json!(args.clone()).to_string(), sender_id.clone(), hash_prefix.clone(), options.clone(), None, &mut contract.content_tree);
+
+    let mut prev_content_count = 0;
+    if hierarchies.len() > 0 {
+        let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap());
+        let mut val = contract.content_tree.get(&prev_hash).unwrap();
+        prev_content_count = val.clone();
+        val += 1;
+        if val > 3 {
+            val = 3;
+        }
+        contract.content_tree.set(&prev_hash, val)
+    }
+
+    let drips = contract.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), Some(prev_content_count));
+    Event::log_add_content(
+        "".to_string(), 
+        [hierarchies, vec![Hierarchy { 
+            target_hash, 
+            account_id: sender_id,
+            options
+        }]].concat(),
+        Some(json!({
+            "drips": drips
+        }).to_string())
+    );
+    target_hash
 }

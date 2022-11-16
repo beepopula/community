@@ -227,6 +227,7 @@ dependencies = [
 name = "community"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "near-contract-standards",
  "near-fixed-bit-tree",
  "near-non-transferrable-token",

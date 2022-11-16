@@ -14,7 +14,14 @@ pub enum Event {
     ContentUnlike(Vec<ContentHierarchyData>),
 
     //custome events
-    ContentShare(Vec<ContentShareData>)
+    ContentShare(Vec<ContentShareData>),
+    Refund(Vec<RefundData>)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct RefundData {
+    pub memo: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -128,6 +135,14 @@ impl Event {
                 hierarchies,
                 inviter_id,
                 viewer_id,
+                memo
+            }
+        ]).log()
+    }
+
+    pub fn log_refund(memo: Option<String>) {
+        Event::Refund(vec![
+            RefundData {
                 memo
             }
         ]).log()

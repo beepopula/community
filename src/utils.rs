@@ -2,10 +2,10 @@
 
 use std::convert::TryFrom;
 
+use ed25519_dalek::Verifier;
 use near_sdk::{Balance, StorageUsage, Promise, log};
 
 use crate::*;
-use crate::signature::ed25519::{PublicKey, Signature};
 
 
 pub(crate) fn refund_extra_storage_deposit(storage_used: StorageUsage, used_balance: Balance) {
@@ -27,11 +27,18 @@ pub(crate) fn refund_extra_storage_deposit(storage_used: StorageUsage, used_bala
 }
 
 pub(crate) fn verify(message: Vec<u8>, sign: Vec<u8>, pk: Vec<u8>) {
-    let pk = PublicKey::from_slice(&pk).unwrap();
-    let sign = Signature::from_slice(&sign).unwrap();
-    match pk.verify(message, &sign) {
+    let pk = ed25519_dalek::PublicKey::from_bytes(&pk).unwrap();
+    if sign.len() != 64 {
+        panic!("Invalid signature data length.");
+    }
+    let mut sig_data: [u8; 64] = [0; 64];
+    for i in 0..64 {
+        sig_data[i] = sign.get(i).unwrap_or(&0).clone();
+    }
+    let sign = ed25519_dalek::Signature::try_from(sig_data).unwrap();
+    match pk.verify(&message, &sign) {
         Ok(_) => log!("verify ok"),
-        Err(_) => panic!("verify error")
+        Err(_) => panic!("verify error"),
     }
 }
 

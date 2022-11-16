@@ -13,6 +13,7 @@ near-contract-standards = "4.1.0-pre.3"
 uint = { version = "0.9.3", default-features = false }
 near-fixed-bit-tree = "0.0.0"
 near-non-transferrable-token = { path = "../near-non-transferrable-token/near-non-transferrable-token", version = "=0.0.1"}
+ed25519-dalek = { version = "1.0.1", features = ["alloc"] }
 
 [profile.release]
 codegen-units = 1

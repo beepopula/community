@@ -6,6 +6,11 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
 
         assert!(self.can_execute_action(sender_id.clone(), Permission::Report), "not allowed");
+
+        let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
+        let content_account_id = hierarchy.account_id.clone();
+        assert!(content_account_id != sender_id, "can not be content owner");
+
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
             Some(v) => v,
             None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
