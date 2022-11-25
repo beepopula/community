@@ -1,13 +1,22 @@
-Popula community Smart Contract
+Popula community
 ==================
 
-A [smart contract] written in [Rust] for an app initialized with [create-near-app]
+An all-in-one template for general purpose communities on Near.
 
 
-Quick Start
+Features
 ===========
+### User Contents
+Users can add thier post, multi level comment and like action to community. These raw data stores in transactions, and smart contract only stores their hashes. But here we only stores the previous 28 bits of a hash through an optimized bit tree.
 
-Before you compile this code, you will need to install Rust with [correct target]
+### Role Management
+Includes variety of permissions that a role might use. And contains mod level for different roles even a role that only manage specific one other role for purpose. A global role is used then all roles can be configured by a single transaction.
+
+### Deposit System
+Since it's difficult to prove someone's assets on chain, we provide deposit system to simplified the procedure. It is not only for Near token but all NEP-141 tokens and NtFt which is integrated in drip protocol.
+
+### Points Recorder
+We defined a series of point map for every action as well as drips, so anyone can know who is more active in a community. And those drips can be collected by a verified NtFt contract then users can prove it to a deposit system not only for this community. 
 
 
 Exploring The Code
