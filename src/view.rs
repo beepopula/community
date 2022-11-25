@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{*, access::Relationship};
 use utils::get_content_hash;
 use post::Hierarchy;
 use account::Deposit;
@@ -53,6 +53,16 @@ impl Community {
         let view_hash = env::sha256(&(account_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
         //let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
         self.relationship_tree.check(&view_hash)
+    }
+
+    pub fn get_global_role(&self) -> (Vec<Permission>, Vec<(Relationship, Option<Access>)>) {
+        let mut keys = vec![];
+        let mut vals = vec![];
+        for (key, value) in self.role_management.global_role.iter() {
+            keys.push(key.clone());
+            vals.push(value.clone());
+        }
+        (keys, vals)
     }
 
     pub fn get_roles(&self) -> HashMap<String, RoleOutput> {

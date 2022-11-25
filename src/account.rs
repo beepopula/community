@@ -50,13 +50,19 @@ impl Default for Account {
 impl Account {
 
     pub fn is_registered(&self) -> bool {
-       match self.data.get(REGISTERED) {
+        if get_arg::<bool>(OPEN_ACCESS).unwrap_or(false) {
+            return true
+        }
+        match self.data.get(REGISTERED) {
            Some(v) => serde_json::from_str(v).unwrap(),
            None => false
-       }
+        }
     }
 
     pub fn set_registered(&mut self, registered: bool) {
+        if get_arg::<bool>(OPEN_ACCESS).unwrap_or(false) {
+            return
+        }
         self.data.insert(REGISTERED.to_string(), json!(registered).to_string());
     }
 

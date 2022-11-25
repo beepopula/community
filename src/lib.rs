@@ -17,6 +17,7 @@ use drip::{Drip};
 use role::{RoleManagement};
 use utils::{refund_extra_storage_deposit};
 use crate::post::Hierarchy;
+use crate::utils::get_arg;
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -49,6 +50,18 @@ pub struct Community {
     role_management: RoleManagement
 }
 
+#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+pub struct OldCommunity {
+    owner_id: AccountId,
+    args: HashMap<String, String>,
+    accounts: LookupMap<AccountId, Account>,
+    content_tree: BitTree,
+    relationship_tree: BitTree,
+    reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
+    drip: Drip,
+    roles: Vec<u8>
+}
+
 
 const MAX_LEVEL: usize = 3;
 
@@ -58,6 +71,15 @@ pub enum StorageKey {
     Account,
     Roles
 }
+
+/*
+args : {
+    drip_contract: AccountId,
+    open_access: bool   //no join action needed
+}
+*/
+const DRIP_CONTRACT: &str = "drip_contract";
+const OPEN_ACCESS: &str = "open_access";
 
 
 #[near_bindgen]
@@ -83,16 +105,19 @@ impl Community {
 
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        let prev: Community = env::state_read().expect("ERR_NOT_INITIALIZED");
+        let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
         assert_eq!(
             env::predecessor_account_id(),
             prev.owner_id,
             "Only owner"
         );
+        let mut args = HashMap::new();
+        args.insert(DRIP_CONTRACT.to_string(), "drip4.bhc8521.testnet".to_string());
+        args.insert(OPEN_ACCESS.to_string(), "true".to_string());
         
         let this = Community {
-            owner_id: prev.owner_id,
-            args: prev.args,
+            owner_id: env::predecessor_account_id(),
+            args: args,
             accounts: LookupMap::new(StorageKey::Account),
             content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
             relationship_tree: BitTree::new(28, vec![1], 0),
@@ -102,9 +127,24 @@ impl Community {
         };
         this
     }
+
+    pub fn follow(&mut self, account_id: AccountId) {
+        let sender_id = env::predecessor_account_id();
+        let hash = env::sha256(&(sender_id.to_string() + "follwing" + &account_id.to_string()).into_bytes());
+        self.relationship_tree.set(&hash, 0);
+        Event::log_follow(sender_id, account_id,None);
+    }
+
+    pub fn unfollow(&mut self, account_id: AccountId) {
+        let sender_id = env::predecessor_account_id();
+        let hash = env::sha256(&(sender_id.to_string() + "follwing" + &account_id.to_string()).into_bytes());
+        self.relationship_tree.del(&hash);
+        Event::log_unfollow(sender_id, account_id, None);
+    }
     
     #[payable]
     pub fn join(&mut self) {
+        assert!(get_arg::<bool>(OPEN_ACCESS).unwrap_or(false), "now allowed");
         let sender_id = env::predecessor_account_id();
         let mut account = self.accounts.get(&sender_id).unwrap_or_default();
         account.set_registered(true);
@@ -114,6 +154,7 @@ impl Community {
     #[payable]
     pub fn quit(&mut self) {
         assert_one_yocto();
+        assert!(get_arg::<bool>(OPEN_ACCESS).unwrap_or(false), "now allowed");
         let sender_id = env::predecessor_account_id();
         let account = self.accounts.get(&sender_id);
         if let Some(mut account) = account {

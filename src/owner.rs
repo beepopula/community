@@ -30,6 +30,9 @@ impl Community {
         assert!(sender == self.owner_id || get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "owner only");
         Promise::new(env::current_account_id()).delete_account(sender);
     }
+
+
+    
 }
 
 #[no_mangle]

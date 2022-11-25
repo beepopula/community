@@ -79,7 +79,7 @@ impl NtftReceiver for Community {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Report(report_input) => {
-                assert!(AccountId::from_str(self.args.get("drip_contract").unwrap()).unwrap() == env::predecessor_account_id(), "wrong token id");
+                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_refund".to_string());
                 assert!(amount.0 >= need_amount, "not enough drip");
