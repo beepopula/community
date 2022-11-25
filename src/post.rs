@@ -23,16 +23,6 @@ pub struct Args {
     audio: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug)]
-pub struct EncryptArgs {
-    text: Option<String>,
-    imgs: Option<String>,
-    video: Option<String>,
-    audio: Option<String>
-}
-
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -65,30 +55,39 @@ pub enum Report {
 #[near_bindgen]
 impl Community {
 
-    pub fn add_item(&mut self, args: String, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
-        let sender_id = env::signer_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(0)), "not allowed");
-        let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), options.clone(), None, &mut self.content_tree);
-        let drips = self.drip.set_content_drip(Vec::new(), sender_id.clone(), None);
-        Event::log_add_content(
-            args, 
-            vec![Hierarchy { 
-                target_hash, 
-                account_id: sender_id,
-                options
-            }], 
-            Some(json!({
-                "drips": drips
-            }).to_string())
-        );
-        target_hash
-    }
+    // pub fn add_item(&mut self, args: String, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
+    //     let sender_id = env::signer_account_id();
+    //     assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(0)), "not allowed");
+    //     let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), options.clone(), None, &mut self.content_tree);
+    //     let drips = self.drip.set_content_drip(Vec::new(), sender_id.clone(), None);
+    //     Event::log_add_content(
+    //         args, 
+    //         vec![Hierarchy { 
+    //             target_hash, 
+    //             account_id: sender_id,
+    //             options
+    //         }], 
+    //         Some(json!({
+    //             "drips": drips
+    //         }).to_string())
+    //     );
+    //     target_hash
+    // }
 
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(hierarchies.len() as u8)), "not allowed");
-        let args_obj: Args = serde_json::from_str(&args).unwrap();
-        check_args(args_obj.text, args_obj.imgs, args_obj.video, args_obj.audio);
+        let mut check_encryption_content_permission = false;
+        if let Some(options) = options.clone() {
+            if options.contains_key("access") {
+                check_encryption_content_permission = true
+            } 
+        } 
+
+        if check_encryption_content_permission {
+            assert!(self.can_execute_action(sender_id.clone(), Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
+        } else {
+            assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+        }
 
         assert!(hierarchies.len() < MAX_LEVEL, "error");
 
@@ -115,45 +114,6 @@ impl Community {
                 account_id: sender_id,
                 options
             }]].concat(),
-            Some(json!({
-                "drips": drips
-            }).to_string())
-        );
-        target_hash
-    }
-
-    pub fn add_encrypt_content(&mut self, encrypt_args: String, access: Option<Access>, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>, nonce: String, sign: String) -> Base58CryptoHash {
-        let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
-        let pk: Vec<u8> = bs58::decode(self.args.get("public_key").unwrap().clone()).into_vec().unwrap();
-
-        let hash = env::sha256(&(encrypt_args.clone() + &nonce).into_bytes());
-        let sign: Vec<u8> = bs58::decode(sign).into_vec().unwrap();
-        verify(hash.clone(), sign.into(), pk);
-
-        let args: EncryptArgs = serde_json::from_str(&encrypt_args).unwrap();
-        check_encrypt_args(args.text, args.imgs, args.video, args.audio);
-
-        assert!(hierarchies.len() < MAX_LEVEL, "error");
-
-        let hash_prefix = get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found");
-
-        let target_hash = set_content(encrypt_args.clone(), sender_id.clone(), hash_prefix.clone(), options.clone(), Some("encrypted".to_string()), &mut self.content_tree);
-        
-        let mut prev_content_count = 0;
-        if hierarchies.len() > 0 {
-            let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix).unwrap());
-            prev_content_count = self.content_tree.get(&prev_hash).unwrap();
-        }
-
-        let drips = self.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), Some(prev_content_count));
-        Event::log_add_content(
-            encrypt_args, 
-            [hierarchies, vec![Hierarchy { 
-                target_hash, 
-                account_id: sender_id,
-                options
-            }]].concat(), 
             Some(json!({
                 "drips": drips
             }).to_string())
@@ -307,10 +267,11 @@ impl Community {
 
 
 #[no_mangle]
-pub extern "C" fn add_long_content() -> Base58CryptoHash {
+pub extern "C" fn add_long_content() {
+    env::setup_panic_hook();
     let raw_input = env::input().unwrap();
-    let args_length = u32::try_from_slice(&raw_input[0..4]).unwrap();
-    let args: InputArgs = serde_json::from_slice(&raw_input[5..(args_length as usize + 5)]).unwrap();
+    let args_length = u32::from_le_bytes(raw_input[0..4].try_into().unwrap());
+    let args: InputArgs = serde_json::from_slice(&raw_input[4..(args_length as usize + 4)]).unwrap();
     let hierarchies = args.hierarchies.clone();
     let options = args.options.clone();
     let sender_id = env::predecessor_account_id();
@@ -346,5 +307,24 @@ pub extern "C" fn add_long_content() -> Base58CryptoHash {
             "drips": drips
         }).to_string())
     );
-    target_hash
+    // String::from(&target_hash)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::convert::TryInto;
+
+
+    #[test]
+    pub fn test() {
+        let raw_input: Vec<u8> = vec![0x12, 0x00, 0x00, 0x00, 0x7b, 0x22, 0x68, 0x69, 0x65, 0x72, 0x61, 0x72, 0x63, 0x68, 0x69, 0x65, 0x73, 0x22, 0x3a, 0x5b, 0x5d, 0x7d, 0x31, 0x32, 0x33];
+        let raw_args_length: [u8; 4] = raw_input[0..4].try_into().unwrap();
+        let args_length = u32::from_le_bytes(raw_args_length);
+        print!("{:?}", args_length);
+        // let args: InputArgs = serde_json::from_slice(&raw_input[4..(args_length as usize + 4)]).unwrap();
+        // let hierarchies = args.hierarchies.clone();
+        // let options = args.options.clone();
+    }
+
 }

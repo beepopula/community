@@ -14,9 +14,8 @@ use near_sdk::serde_json::{json, self};
 use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
-use post::{Report};
-use role::{Role, RoleKind, init_roles};
-use utils::{check_args, verify, check_encrypt_args, refund_extra_storage_deposit, set_content};
+use role::{RoleManagement};
+use utils::{refund_extra_storage_deposit};
 use crate::post::Hierarchy;
 use std::convert::TryFrom;
 use role::Permission;
@@ -47,7 +46,7 @@ pub struct Community {
     relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
-    roles: UnorderedMap<String, Role>
+    role_management: RoleManagement
 }
 
 
@@ -74,12 +73,11 @@ impl Community {
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
-            roles: UnorderedMap::new(StorageKey::Roles)
+            role_management: RoleManagement::new()
         };
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
         this.accounts.insert(&owner_id, &account);
-        init_roles(&mut this);
         this
     }
 
@@ -100,7 +98,7 @@ impl Community {
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
-            roles: UnorderedMap::new("roles".as_bytes())
+            role_management: RoleManagement::new()
         };
         this
     }

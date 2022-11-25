@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use crate::*;
-use crate::role::RoleKindInput;
 use utils::get_content_hash;
 use post::Hierarchy;
 use account::Deposit;
@@ -11,7 +10,6 @@ use account::Deposit;
 #[derive(Debug)]
 pub struct RoleOutput {
     pub alias: String,
-    pub kind: RoleKindInput,
     pub permissions: HashSet<Permission>,
     pub mod_level: u32,
     pub override_level: u32  
@@ -59,15 +57,10 @@ impl Community {
 
     pub fn get_roles(&self) -> HashMap<String, RoleOutput> {
         let mut roles = HashMap::new();
-        for (hash, role) in self.roles.iter() {
-            roles.insert(hash, RoleOutput { 
-                alias: role.alias, 
-                kind: match role.kind {
-                    RoleKind::Everyone => RoleKindInput::Everyone,
-                    RoleKind::Group(_) => RoleKindInput::Group,
-                    RoleKind::Access(access) => RoleKindInput::Access(access)
-                }, 
-                permissions: role.permissions, 
+        for (hash, role) in self.role_management.roles.iter() {
+            roles.insert(hash.clone(), RoleOutput { 
+                alias: role.alias.clone(), 
+                permissions: role.permissions.clone(), 
                 mod_level: role.mod_level, 
                 override_level: role.override_level 
             });
