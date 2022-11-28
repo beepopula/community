@@ -22,15 +22,22 @@ We defined a series of point map for every action as well as drips, so anyone ca
 Exploring The Code
 ==================
 
-1. The main smart contract code lives in `src/lib.rs`. You can compile it with
-   the `./compile` script.
-2. Tests: You can run smart contract tests with the `./test` script. This runs
-   standard Rust tests using [cargo] with a `--nocapture` flag so that you
-   can see any debug info you print to the console.
+## Terminology
 
+* `owner_id`: The owner of this contract.
+* `args`: Some customized arguments.
+* `accounts`: Includes Points, deposit, and any possible arguments.
+* `content_tree`: Tree map for large scale contents, for now it stores posts, comments.  
+* `relationship_tree`: Tree map for like, share and follow actions.
+* `reports`: To record who's reporting user contents.
+* `drip`: Functions to give users points.
+* `role_management`: A set of permissions that a user or an admin can do.
 
-  [smart contract]: https://docs.near.org/docs/develop/contracts/overview
-  [Rust]: https://www.rust-lang.org/
-  [create-near-app]: https://github.com/near/create-near-app
-  [correct target]: https://github.com/near/near-sdk-rs#pre-requisites
-  [cargo]: https://doc.rust-lang.org/book/ch01-03-hello-cargo.html
+## Function specification
+
+### Action proof
+Contains a set of actions like post or like. When user send a transaction with any action, this contract stores their raw data along with sender and a key identifier into hashes and return them back to users. Verifier just need to know the raw data and corresponding hash then verifier can know the raw data exist.
+
+### Role management
+Contains a set of functions to manage permissions and roles.We firstly define a global role that controls every permission by setting relationships between permission controller and normal role permissions. For example, if the global role says comment permission is logic OR to normal role permission, then all community members can comment, and for logic AND it allows members in specific roles to comment. On the other hand, if global role does not have comment permission, then no one except owner can comment.
+
