@@ -1,4 +1,4 @@
-Popula community
+Popula Community
 ==================
 
 An all-in-one general purpose template for communities on Near.
