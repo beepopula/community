@@ -31,6 +31,6 @@ Since it's difficult to prove someone's assets on chain, we provide deposit syst
 ### Points Recorder
 We defined a series of point map for every action as well as drips, so anyone can know who is more active in a community. And those drips can be collected by a verified NtFt contract then users can prove it to a deposit system not only for this community. 
 
-## Build and test
+## Build
 
 Run `RUSTFLAGS='-C link-arg=-s' cargo build --all --target wasm32-unknown-unknown --release` to build the project.
