@@ -13,15 +13,15 @@ use utils::{get_content_hash, set_content};
 //     access: Access
 // }
 
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
-#[derive(Debug)]
-pub struct Args {
-    text: Option<String>,
-    imgs: Option<Vec<String>>,
-    video: Option<String>,
-    audio: Option<String>,
-}
+// #[derive(Serialize, Deserialize)]
+// #[serde(crate = "near_sdk::serde")]
+// #[derive(Debug)]
+// pub struct Args {
+//     text: Option<String>,
+//     imgs: Option<Vec<String>>,
+//     video: Option<String>,
+//     audio: Option<String>,
+// }
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]

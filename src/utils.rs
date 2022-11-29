@@ -123,3 +123,8 @@ where T: for<'a> near_sdk::serde::Deserialize<'a>
         Err(_) => None
     }
 }
+
+pub(crate) fn get_access_limit() -> AccessLimit {
+    let this: Community = env::state_read().unwrap();
+    this.access
+}

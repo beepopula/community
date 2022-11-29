@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, utils::get_access_limit};
 
 
 const REGISTERED: &str = "registered";
@@ -49,8 +49,19 @@ impl Default for Account {
 
 impl Account {
 
+    pub fn new() -> Self {
+        let mut this = Self {
+            data: HashMap::new(),
+        };
+        this.data.insert(REGISTERED.to_string(), json!(false).to_string());
+        this.data.insert(DRIP.to_string(), 0.to_string());
+        this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
+        this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
+        this
+    }
+
     pub fn is_registered(&self) -> bool {
-        if get_arg::<bool>(OPEN_ACCESS).unwrap_or(false) {
+        if let AccessLimit::Free = get_access_limit() {
             return true
         }
         match self.data.get(REGISTERED) {
@@ -60,9 +71,6 @@ impl Account {
     }
 
     pub fn set_registered(&mut self, registered: bool) {
-        if get_arg::<bool>(OPEN_ACCESS).unwrap_or(false) {
-            return
-        }
         self.data.insert(REGISTERED.to_string(), json!(registered).to_string());
     }
 

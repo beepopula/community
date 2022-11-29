@@ -31,8 +31,13 @@ impl Community {
         Promise::new(env::current_account_id()).delete_account(sender);
     }
 
-
-    
+    #[payable]
+    pub fn set_access_limit(&mut self, access: AccessLimit) {
+        assert_one_yocto();
+        let sender = env::predecessor_account_id();
+        assert!(sender == self.owner_id || get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "owner only");
+        self.access = access;
+    }
 }
 
 #[no_mangle]

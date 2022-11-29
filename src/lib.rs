@@ -35,6 +35,7 @@ pub mod access;
 pub mod account;
 pub mod resolver;
 pub mod internal;
+pub mod metadata;
 
 
 #[near_bindgen]
@@ -47,7 +48,8 @@ pub struct Community {
     relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
-    role_management: RoleManagement
+    role_management: RoleManagement,
+    access: AccessLimit
 }
 
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -72,6 +74,15 @@ pub enum StorageKey {
     Roles
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(BorshDeserialize, BorshSerialize, BorshStorageKey)]
+pub enum AccessLimit {
+    Free,
+    Registy,
+    TokenLimit(Access)
+}
+
 /*
 args : {
     drip_contract: AccountId,
@@ -79,7 +90,6 @@ args : {
 }
 */
 const DRIP_CONTRACT: &str = "drip_contract";
-const OPEN_ACCESS: &str = "open_access";
 
 
 #[near_bindgen]
@@ -95,7 +105,8 @@ impl Community {
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
-            role_management: RoleManagement::new()
+            role_management: RoleManagement::new(),
+            access: AccessLimit::Registy
         };
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
@@ -112,8 +123,6 @@ impl Community {
             "Only owner"
         );
         let mut args = HashMap::new();
-        args.insert(DRIP_CONTRACT.to_string(), "drip4.bhc8521.testnet".to_string());
-        args.insert(OPEN_ACCESS.to_string(), "true".to_string());
         
         let this = Community {
             owner_id: env::predecessor_account_id(),
@@ -123,7 +132,8 @@ impl Community {
             relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(b'r'),
             drip: Drip::new(),
-            role_management: RoleManagement::new()
+            role_management: RoleManagement::new(),
+            access: AccessLimit::Registy
         };
         this
     }
@@ -144,7 +154,6 @@ impl Community {
     
     #[payable]
     pub fn join(&mut self) {
-        assert!(get_arg::<bool>(OPEN_ACCESS).unwrap_or(false), "now allowed");
         let sender_id = env::predecessor_account_id();
         let mut account = self.accounts.get(&sender_id).unwrap_or_default();
         account.set_registered(true);
@@ -154,14 +163,13 @@ impl Community {
     #[payable]
     pub fn quit(&mut self) {
         assert_one_yocto();
-        assert!(get_arg::<bool>(OPEN_ACCESS).unwrap_or(false), "now allowed");
         let sender_id = env::predecessor_account_id();
         let account = self.accounts.get(&sender_id);
         if let Some(mut account) = account {
             if account.get_drip() == 0 {
                 self.accounts.remove(&sender_id);
             } else {
-                account.set_registered(true);
+                account.set_registered(false);
             }
         }
     }

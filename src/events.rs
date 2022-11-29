@@ -15,7 +15,15 @@ pub enum Event {
 
     //custome events
     ContentShare(Vec<ContentShareData>),
-    Refund(Vec<RefundData>)
+    Refund(Vec<RefundData>),
+    SetMetadata(Vec<Metadata>)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Metadata {
+    pub key: String,
+    pub val: String
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -146,5 +154,9 @@ impl Event {
                 memo
             }
         ]).log()
+    }
+
+    pub fn log_set_metadata(metadata: Vec<Metadata>) {
+        Event::SetMetadata(metadata).log()
     }
 }
