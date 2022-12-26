@@ -54,7 +54,7 @@ pub enum Permission {
     DelRole(Option<String>),
     AddMember(Option<String>),
     RemoveMember(Option<String>),
-    Other(String)   //off-chain permission
+    Other(Option<String>)   //off-chain permission
 }
 
 
@@ -79,6 +79,13 @@ impl RoleManagement {
         permissions.insert(Permission::Like, (Relationship::Or, None));
         permissions.insert(Permission::Unlike, (Relationship::Or, None));
         permissions.insert(Permission::Report, (Relationship::Or, None));
+        permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
+        permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
+        permissions.insert(Permission::SetRole(None), (Relationship::And, None));
+        permissions.insert(Permission::DelRole(None), (Relationship::And, None));
+        permissions.insert(Permission::AddMember(None), (Relationship::And, None));
+        permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
+        permissions.insert(Permission::Other(None), (Relationship::And, None));
         let mut this = Self {
             roles: HashMap::new(),
             global_role: permissions.clone()
@@ -306,26 +313,9 @@ impl Community {
             return true
         }
 
-        match self.role_management.global_role.get(&permission) {
-            Some(val) => match val.0 {
-                Relationship::Or => {
-                    if let Some(access) = &val.1 {
-                        if access.check_account(&account_id) {
-                            return true
-                        }
-                    } else {
-                        return true
-                    }
-                },
-                Relationship::And => {
-                    if let Some(access) = &val.1 {
-                        if !access.check_account(&account_id) {
-                            return false
-                        }
-                    }
-                },
-            }, 
-            None => return false
+        match self.check_global_allowed(&permission, &account_id) {
+            Some(allowed) => return allowed,
+            None => {}
         }
 
         let roles = self.get_user_roles(&account_id);
@@ -371,6 +361,86 @@ impl Community {
         allowed_roles
     }
 
+    fn check_global_allowed(&self, permission: &Permission, account_id: &AccountId) -> Option<bool> {
+        if *account_id == self.owner_id {
+            return Some(true)
+        }
+        let permissions = self.role_management.global_role.clone();
+        let relationship = match permission {
+            Permission::SetRole(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::SetRole(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::DelRole(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::DelRole(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::AddMember(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::AddMember(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::RemoveMember(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::RemoveMember(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::Other(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::Other(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            _ => match permissions.get(&permission) {
+                Some(val) => val,
+                None => return Some(false)
+            }
+        };
+        match relationship.0 {
+            Relationship::Or => {
+                if let Some(access) = &relationship.1 {
+                    if access.check_account(&account_id) {
+                        return Some(true)
+                    }
+                    return None
+                }
+                return Some(true)
+            },
+            Relationship::And => {
+                if let Some(access) = &relationship.1 {
+                    if !access.check_account(&account_id) {
+                        return Some(false)
+                    }
+                    return None
+                }
+                return None
+            },
+        }
+        
+        
+    }
+
     fn check_allowed(&self, permission: &Permission, permissions: &HashSet<Permission>, account_id: &AccountId) -> bool {
         if *account_id == self.owner_id {
             return true
@@ -399,6 +469,13 @@ impl Community {
             },
             Permission::RemoveMember(hash) => {
                 let allowed = permissions.contains(&permission) || permissions.contains(&Permission::RemoveMember(None));
+                allowed && match hash {
+                    Some(hash) => self.role_management.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
+                    None => true,
+                }
+            },
+            Permission::Other(hash) => {
+                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::Other(None));
                 allowed && match hash {
                     Some(hash) => self.role_management.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
                     None => true,
