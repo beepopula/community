@@ -61,13 +61,14 @@ impl Account {
     }
 
     pub fn is_registered(&self) -> bool {
-        if let AccessLimit::Free = get_access_limit() {
-            return true
+        match get_access_limit() {
+            AccessLimit::Free => true,
+            _ => match self.data.get(REGISTERED) {
+                Some(v) => serde_json::from_str(v).unwrap(),
+                None => false
+            }
         }
-        match self.data.get(REGISTERED) {
-           Some(v) => serde_json::from_str(v).unwrap(),
-           None => false
-        }
+        
     }
 
     pub fn set_registered(&mut self, registered: bool) {

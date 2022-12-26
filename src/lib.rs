@@ -170,6 +170,7 @@ impl Community {
                 self.accounts.remove(&sender_id);
             } else {
                 account.set_registered(false);
+                self.accounts.insert(&sender_id, &account);
             }
         }
     }
