@@ -111,14 +111,14 @@ pub(crate) fn is_registered(account_id: &AccountId) -> bool {
 }
 
 pub(crate) fn get_arg<T>(key: &str) -> Option<T> 
-where T: for<'a> near_sdk::serde::Deserialize<'a>
+where T: std::str::FromStr
 {
     let this: Community = env::state_read().unwrap();
     let value = match this.args.get(key) {
         Some(v) => v,
         None => return None
     };
-    match serde_json::from_str::<T>(value) {
+    match T::from_str(value) {
         Ok(res) => Some(res),
         Err(_) => None
     }

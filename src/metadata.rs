@@ -7,7 +7,7 @@ impl Community {
         let sender_id = env::predecessor_account_id();
         let mut metadata = vec![];
         for (key, val) in items {
-            if !self.can_execute_action(sender_id.clone(), Permission::Other(key.clone())) {
+            if !self.can_execute_action(sender_id.clone(), Permission::Other(Some(key.clone()))) {
                 continue
             }
             metadata.push(Metadata {

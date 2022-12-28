@@ -106,10 +106,28 @@ impl NtftReceiver for Community {
 
 #[cfg(test)]
 mod test {
-    use near_sdk::serde_json::json;
+    use std::{collections::HashMap, convert::{TryInto, TryFrom}, str::FromStr};
+
+    use near_sdk::{serde_json::{json, self}, AccountId, serde::{Deserialize, de::IntoDeserializer}};
 
     use super::{MsgInput, ReportInput};
 
+    fn get_arg<T>(key: &str) -> Option<T> 
+    where T: std::str::FromStr
+    {
+        let mut args = HashMap::new();
+        args.insert("drip_contract".to_string(), "drip4.popula.testnet".to_string());
+        
+        let value = match args.get(&key.to_string()) {
+            Some(v) => v,
+            None => return None
+        };
+
+        match T::from_str(value) {
+            Ok(res) => Some(res),
+            Err(_) => None
+        }
+    }
 
     #[test]
     fn test() {
@@ -119,5 +137,11 @@ mod test {
         });
         print!("{:?}", json!(msg_input).to_string());
 
+    }
+
+    #[test]
+    fn test_args() {
+        print!("{}", get_arg::<AccountId>("drip_contract").unwrap().to_string());
+        // assert!(false)
     }
 }

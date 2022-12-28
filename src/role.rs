@@ -474,15 +474,158 @@ impl Community {
                     None => true,
                 }
             },
+            Permission::Other(_) => permissions.contains(&permission) || permissions.contains(&Permission::Other(None)),
+            _ => permissions.contains(&permission)
+        }
+    }
+
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use std::{convert::TryInto, collections::{HashMap, HashSet}};
+
+    use near_sdk::AccountId;
+
+    use crate::access::{Relationship, Access};
+
+    use super::{RoleManagement, Permission};
+
+    fn check_global_allowed(permission: &Permission, permissions: HashMap<Permission, (Relationship, Option<Access>)>) -> Option<bool> {
+        let relationship = match permission {
+            Permission::SetRole(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::SetRole(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::DelRole(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::DelRole(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::AddMember(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::AddMember(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            Permission::RemoveMember(hash) => {
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::RemoveMember(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
             Permission::Other(hash) => {
-                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::Other(None));
+                match permissions.get(&permission) {
+                    Some(val) => val,
+                    None => match permissions.get(&Permission::Other(None)) {
+                        Some(val) => val,
+                        None => return Some(false)
+                    }
+                }
+            },
+            _ => match permissions.get(&permission) {
+                Some(val) => val,
+                None => return Some(false)
+            }
+        };
+        match relationship.0 {
+            Relationship::Or => {
+                if let Some(access) = &relationship.1 {
+                    return None
+                }
+                return Some(true)
+            },
+            Relationship::And => {
+                if let Some(access) = &relationship.1 {
+                    return None
+                }
+                return None
+            },
+        }
+        
+        
+    }
+
+    fn check_allowed(permission: &Permission, permissions: &HashSet<Permission>) -> bool {
+        match permission {
+            Permission::SetRole(hash) => {
+                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::SetRole(None));
                 allowed && match hash {
-                    Some(hash) => self.role_management.roles.get(hash).unwrap().mod_level < self.get_user_mod_level(&account_id),
+                    Some(hash) => true,
                     None => true,
                 }
             },
+            Permission::DelRole(hash) => {
+                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::DelRole(None));
+                allowed && match hash {
+                    Some(hash) => true,
+                    None => true,
+                }
+            },
+            Permission::AddMember(hash) => {
+                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::AddMember(None));
+                allowed && match hash {
+                    Some(hash) => true,
+                    None => true,
+                }
+            },
+            Permission::RemoveMember(hash) => {
+                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::RemoveMember(None));
+                allowed && match hash {
+                    Some(hash) => true,
+                    None => true,
+                }
+            },
+            Permission::Other(_) => permissions.contains(&permission) || permissions.contains(&Permission::Other(None)),
             _ => permissions.contains(&permission)
         }
+    }
+
+    #[test]
+    pub fn test() {
+        let mut permissions = HashMap::new();
+        permissions.insert(Permission::AddContent(0), (Relationship::Or, None));
+        permissions.insert(Permission::AddContent(1), (Relationship::Or, None));
+        permissions.insert(Permission::AddContent(2), (Relationship::Or, None));
+        permissions.insert(Permission::DelContent, (Relationship::Or, None));
+        permissions.insert(Permission::AddEncryptContent(0), (Relationship::Or, None));
+        permissions.insert(Permission::AddEncryptContent(1), (Relationship::Or, None));
+        permissions.insert(Permission::AddEncryptContent(2), (Relationship::Or, None));
+        permissions.insert(Permission::DelEncryptContent, (Relationship::Or, None));
+        permissions.insert(Permission::Like, (Relationship::Or, None));
+        permissions.insert(Permission::Unlike, (Relationship::Or, None));
+        permissions.insert(Permission::Report, (Relationship::Or, None));
+        permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
+        permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
+        permissions.insert(Permission::SetRole(None), (Relationship::And, None));
+        permissions.insert(Permission::DelRole(None), (Relationship::And, None));
+        permissions.insert(Permission::AddMember(None), (Relationship::And, None));
+        permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
+        permissions.insert(Permission::Other(None), (Relationship::And, None));
+        let res = check_global_allowed(&Permission::AddMember(Some("ban".to_string())), permissions);
+        print!("1: {:?}", res);
+
+        let mut permissions = HashSet::new();
+        permissions.insert(Permission::AddMember(None));
+        let res = check_allowed(&Permission::AddMember(Some("ban".to_string())), &permissions);
+        print!("2: {:?}", res)
     }
 
 }
