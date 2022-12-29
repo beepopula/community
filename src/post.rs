@@ -75,6 +75,8 @@ impl Community {
     // }
 
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
+        // TODO: avoid hash collision through a loop
+        
         let sender_id = env::predecessor_account_id();
         let mut check_encryption_content_permission = false;
         if let Some(options) = options.clone() {

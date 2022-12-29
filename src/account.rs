@@ -20,10 +20,8 @@ pub enum Deposit {
 fn get_account_decay(count: u64) -> u32 {
     if count <= 10 {
         return 100
-    } else if count > 10 && count <= 20 {
-        return 50
-    }
-    25
+    } 
+    40
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]

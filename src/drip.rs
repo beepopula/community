@@ -18,17 +18,17 @@ pub struct Drip {
 
 pub fn get_map_value(key: &String) -> u128 {
     let map: HashMap<String, U128> = serde_json::from_str(&json!({
-        "content0": "200000000000000000000000",    //post                       active
-        "content1": "200000000000000000000000",    //comment                    active
-        "content2": "200000000000000000000000",    //subcomment                 active
-        "content3": "100000000000000000000000",    //comment to post            passive
-        "content4": "40000000000000000000000",     //subcomment to post         passive
-        "content5": "100000000000000000000000",    //subcomment to comment      passive
-        "like": "20000000000000000000000",         //like                       active
-        "share": "20000000000000000000000",        //share                      active for inviter
-        "be_shared": "50000000000000000000000",    //be_shared                  passive
-        "be_liked": "50000000000000000000000",     //be_liked                   passive
-        "report": "400000000000000000000000",      //report                     passive
+        "content0":   "1000000000000000000000000",    //post                       active
+        "content1":   "1000000000000000000000000",    //comment                    active
+        "content2":   "1000000000000000000000000",    //subcomment                 active
+        "content3":    "400000000000000000000000",    //comment to post            passive
+        // "content4": "40000000000000000000000",     //subcomment to post         passive
+        "content5":    "400000000000000000000000",    //subcomment to comment      passive
+        "like":        "200000000000000000000000",         //like                       active
+        "share":     "10000000000000000000000000",        //share                      active for inviter
+        // "be_shared":    "50000000000000000000000",    //be_shared                  passive
+        "be_liked":    "200000000000000000000000",     //be_liked                   passive
+        "report":      "400000000000000000000000",      //report                     passive
         "report_refund": "200000000000000000000000",//report_refund             passive
     }).to_string()).unwrap();
     let val = *map.get(key).unwrap_or(&(U128::from(0)));
@@ -37,10 +37,8 @@ pub fn get_map_value(key: &String) -> u128 {
 
 fn get_content_decay(count: u8) -> u32 {
     match count {
-        0 => 100,
-        1 => 75,
-        2 => 60,
-        _ => 50
+        0 => 200,
+        _ => 100
     }
 }
 

@@ -124,7 +124,7 @@ impl Community {
                 alias,
                 members: format!("{}_member", hash).into_bytes(),
                 permissions: HashSet::new(),
-                mod_level: if self.get_user_mod_level(&sender_id) < mod_level { mod_level } else { 0 },
+                mod_level: if self.get_user_mod_level(&sender_id) < mod_level { 0 } else { mod_level },
                 override_level: override_level
             }
         };
@@ -157,7 +157,7 @@ impl Community {
         
         if let Some(mod_level) = mod_level {
             if mod_level < (*self).get_user_mod_level(&sender_id) {
-                role.mod_level = role.override_level
+                role.mod_level = mod_level
             }
         }
 
