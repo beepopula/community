@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, utils::get_root_id};
 use utils::get_parent_contract_id;
 
 #[near_bindgen]
@@ -43,7 +43,11 @@ impl Community {
 #[no_mangle]
 pub extern "C" fn upgrade() {
     env::setup_panic_hook();
-    assert!(get_parent_contract_id(env::current_account_id()) == env::predecessor_account_id(), "contract's parent only");
+    let parent_contract_id = get_parent_contract_id(env::current_account_id());
+    let root_contract_id = get_root_id(env::current_account_id());
+    let owner_id = env::state_read::<Community>().unwrap().owner_id;
+    assert!(parent_contract_id == env::predecessor_account_id(), "contract's parent only");
+    assert!(root_contract_id == env::signer_account_id() || owner_id == env::signer_account_id(), "not owner");
     let input = env::input().unwrap();
     Promise::new(env::current_account_id()).deploy_contract(input);
 }

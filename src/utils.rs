@@ -46,19 +46,20 @@ pub(crate) fn getSeed() -> String {
     "seed should be replaced here".to_string()
 }
 
-pub(crate) fn check_args(text: Option<String>, imgs: Option<Vec<String>>, video: Option<String>, audio: Option<String>) {
-    assert!(text.is_some() || (imgs.is_some() && imgs.clone().unwrap().len() > 0) || video.is_some() || audio.is_some(), "at least one field");
-}
-
-pub(crate) fn check_encrypt_args(text: Option<String>, imgs: Option<String>, video: Option<String>, audio: Option<String>) {
-    assert!(text.is_some() || imgs.is_some() || video.is_some() || audio.is_some(), "at least one field");
-}
-
 pub(crate) fn get_parent_contract_id(contract_id: AccountId) -> AccountId {
     let current_id = contract_id.to_string();
     let index = current_id.find('.').unwrap();
     let parent_id = current_id[index + 1..].to_string();
     AccountId::try_from(parent_id).unwrap()
+}
+
+pub(crate) fn get_root_id(contract_id: AccountId) -> AccountId {
+    let contract_id = contract_id.to_string();
+    //let index = contract_id.find('.').unwrap();
+    let arr: Vec<String> = contract_id.split('.').map(|v| v.to_string()).collect();
+    //let parent_id = contract_id[index + 1..].to_string();
+    let root_id = arr.get(arr.len() - 2).unwrap().clone() + "." + arr.get(arr.len() - 1).unwrap();
+    AccountId::try_from(root_id).unwrap()
 }
 
 
