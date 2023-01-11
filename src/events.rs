@@ -14,7 +14,7 @@ pub enum Event {
     ContentUnlike(Vec<ContentHierarchyData>),
 
     //custome events
-    ContentShare(Vec<ContentShareData>),
+    Invite(Vec<InviteData>),
     Refund(Vec<RefundData>),
     SetMetadata(Vec<Metadata>)
 }
@@ -57,10 +57,9 @@ pub struct ContentHierarchyData {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
-pub struct ContentShareData {
-    pub hierarchies: Vec<Hierarchy>,
+pub struct InviteData {
     pub inviter_id: AccountId,
-    pub viewer_id: AccountId,
+    pub invitee_id: AccountId,
     pub memo: Option<String>
 }
 
@@ -137,12 +136,11 @@ impl Event {
         ]).log()
     }
 
-    pub fn log_share_content(hierarchies: Vec<Hierarchy>, inviter_id: AccountId, viewer_id: AccountId, memo: Option<String>) {
-        Event::ContentShare(vec![
-            ContentShareData {
-                hierarchies,
+    pub fn log_invite(inviter_id: AccountId, invitee_id: AccountId, memo: Option<String>) {
+        Event::Invite(vec![
+            InviteData {
                 inviter_id,
-                viewer_id,
+                invitee_id,
                 memo
             }
         ]).log()

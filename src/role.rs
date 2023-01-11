@@ -91,7 +91,7 @@ impl RoleManagement {
             global_role: permissions.clone()
         };
         this.roles.insert("ban".to_string(), Role { 
-            alias: "ban".to_string(),
+            alias: "Banned".to_string(),
             members: "ban_member".to_string().into_bytes(), 
             permissions:  HashSet::new(),
             mod_level: 0,
@@ -619,12 +619,12 @@ mod tests {
         permissions.insert(Permission::AddMember(None), (Relationship::And, None));
         permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
         permissions.insert(Permission::Other(None), (Relationship::And, None));
-        let res = check_global_allowed(&Permission::AddMember(Some("ban".to_string())), permissions);
+        let res = check_global_allowed(&Permission::AddContent(0 as u8), permissions);
         print!("1: {:?}", res);
 
         let mut permissions = HashSet::new();
-        permissions.insert(Permission::AddMember(None));
-        let res = check_allowed(&Permission::AddMember(Some("ban".to_string())), &permissions);
+        permissions.insert(Permission::AddContent(0));
+        let res = check_allowed(&Permission::AddContent(0 as u8), &permissions);
         print!("2: {:?}", res)
     }
 

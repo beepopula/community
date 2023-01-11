@@ -84,7 +84,7 @@ pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String
 }
 
 pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: String, options:Option<HashMap<String, String>>, extra: Option<String>, tree: &mut BitTree) -> Base58CryptoHash {
-    let args = args.clone() + &bs58::encode(env::random_seed()).into_string();
+    let args = args.clone() + &env::block_timestamp().to_string();    //&bs58::encode(env::block_timestamp()).into_string();
     let target_hash = env::sha256(&args.clone().into_bytes());
     let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
 
@@ -104,11 +104,17 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
 }
 
 pub(crate) fn is_registered(account_id: &AccountId) -> bool {
-    let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-    match accounts.get(&account_id) {
-        Some(v) => v.is_registered(),
-        None => false
+    match get_access_limit() {
+        AccessLimit::Free => true,
+        _ => {
+            let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+            match accounts.get(&account_id) {
+                Some(v) => v.is_registered(),
+                None => false
+            }
+        }
     }
+    
 }
 
 pub(crate) fn get_arg<T>(key: &str) -> Option<T> 

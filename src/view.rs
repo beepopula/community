@@ -45,13 +45,8 @@ impl Community {
         self.drip.get_content_decay(content_count as u32)
     }
 
-    pub fn check_viewed(&self, hierarchies: Vec<Hierarchy>, inviter_id: AccountId, account_id: AccountId) -> bool {
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
-        let view_hash = env::sha256(&(account_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
-        //let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
+    pub fn check_invited(&self, inviter_id: AccountId, invitee_id: AccountId) -> bool {
+        let view_hash = env::sha256(&(inviter_id.to_string() + "invite" + &invitee_id.to_string()).into_bytes());
         self.relationship_tree.check(&view_hash)
     }
 

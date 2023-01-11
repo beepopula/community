@@ -55,25 +55,6 @@ pub enum Report {
 #[near_bindgen]
 impl Community {
 
-    // pub fn add_item(&mut self, args: String, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
-    //     let sender_id = env::signer_account_id();
-    //     assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(0)), "not allowed");
-    //     let target_hash = set_content(args.clone(), sender_id.clone(), "".to_string(), options.clone(), None, &mut self.content_tree);
-    //     let drips = self.drip.set_content_drip(Vec::new(), sender_id.clone(), None);
-    //     Event::log_add_content(
-    //         args, 
-    //         vec![Hierarchy { 
-    //             target_hash, 
-    //             account_id: sender_id,
-    //             options
-    //         }], 
-    //         Some(json!({
-    //             "drips": drips
-    //         }).to_string())
-    //     );
-    //     target_hash
-    // }
-
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
         // TODO: avoid hash collision through a loop
         
@@ -96,19 +77,19 @@ impl Community {
         let hash_prefix = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
         let target_hash = set_content(args.clone(), sender_id.clone(), hash_prefix.clone(), options.clone(), None, &mut self.content_tree);
 
-        let mut prev_content_count = 0;
+        let mut prev_content_count = None;
         if hierarchies.len() > 0 {
             let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap());
             let mut val = self.content_tree.get(&prev_hash).unwrap();
-            prev_content_count = val.clone();
+            prev_content_count = Some(val.clone());
             val += 1;
-            if val > 3 {
-                val = 3;
+            if val > 1 {
+                val = 1;
             }
             self.content_tree.set(&prev_hash, val)
         }
 
-        let drips = self.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), Some(prev_content_count));
+        let drips = self.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), prev_content_count);
         Event::log_add_content(
             args, 
             [hierarchies, vec![Hierarchy { 
@@ -172,37 +153,12 @@ impl Community {
         Event::log_del_content(hierarchies, None);
     }
 
-    pub fn share_view(&mut self, hierarchies: Vec<Hierarchy>, inviter_id: AccountId) {
-        let sender_id = env::predecessor_account_id();
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
-
-        let view_hash = env::sha256(&(sender_id.to_string() + "viewed" + &hierarchy_hash + "through" + &inviter_id.to_string()).into_bytes());
-        let view_hash: CryptoHash = view_hash[..].try_into().unwrap();
-        let exist = self.relationship_tree.check_and_set(&view_hash, 0);
-        let mut drips = Vec::new();
-        if !exist {
-            drips = self.drip.set_share_drip(hierarchies.clone(), inviter_id.clone());
-        }
-
-        Event::log_share_content(
-            hierarchies,
-            inviter_id,
-            sender_id,
-            Some(json!({
-                "drips": drips
-            }).to_string())
-        );
-    }
-
     pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, report: Report) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
-        assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
+        assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id) || sender_id == self.owner_id, "not allowed");
 
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
             Some(v) => v,
@@ -285,11 +241,11 @@ pub extern "C" fn add_long_content() {
     let hash_prefix = get_content_hash(hierarchies.clone(), None, &contract.content_tree).expect("content not found");
     let target_hash = set_content(json!(args.clone()).to_string(), sender_id.clone(), hash_prefix.clone(), options.clone(), None, &mut contract.content_tree);
 
-    let mut prev_content_count = 0;
+    let mut prev_content_count = None;
     if hierarchies.len() > 0 {
         let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap());
         let mut val = contract.content_tree.get(&prev_hash).unwrap();
-        prev_content_count = val.clone();
+        prev_content_count = Some(val.clone());
         val += 1;
         if val > 3 {
             val = 3;
@@ -297,7 +253,7 @@ pub extern "C" fn add_long_content() {
         contract.content_tree.set(&prev_hash, val)
     }
 
-    let drips = contract.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), Some(prev_content_count));
+    let drips = contract.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), prev_content_count);
     Event::log_add_content(
         "".to_string(), 
         [hierarchies, vec![Hierarchy { 
@@ -315,7 +271,11 @@ pub extern "C" fn add_long_content() {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryInto;
+    use std::{convert::TryInto, str::FromStr};
+
+    use near_sdk::{AccountId, env, json_types::Base58CryptoHash};
+
+    use super::Hierarchy;
 
 
     #[test]
@@ -327,6 +287,66 @@ mod tests {
         // let args: InputArgs = serde_json::from_slice(&raw_input[4..(args_length as usize + 4)]).unwrap();
         // let hierarchies = args.hierarchies.clone();
         // let options = args.options.clone();
+    }
+
+    fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>) -> Option<String> {
+        let mut hash_prefix = "".to_string();
+        for (_, hierarchy) in hierarchies.iter().enumerate() {
+            let mut hierarchy_str = hash_prefix + &hierarchy.account_id.to_string() + &String::from(&hierarchy.target_hash);
+            let hierarchy_hash = env::sha256(&hierarchy_str.into_bytes());
+            let hierarchy_hash: [u8;32] = hierarchy_hash[..].try_into().unwrap();
+            hash_prefix = String::from(&Base58CryptoHash::from(hierarchy_hash));
+        }
+        Some(hash_prefix)
+    }
+
+    #[test]
+    pub fn test_like() {
+        let hierarchies = vec![
+            Hierarchy {
+                target_hash: Base58CryptoHash::from_str("5EVZZTdCcMQ6Di5fq2Zw1HuFd4chQ9KK4DG3byVwiSyp").unwrap(),
+                account_id: AccountId::from_str("tokenq.testnet").unwrap(),
+                options: None
+            },
+            Hierarchy {
+                target_hash: Base58CryptoHash::from_str("6UjBiuEVunhN5t36wERYbpVTdRW5oCYjGKGp23hmQRkF").unwrap(),
+                account_id: AccountId::from_str("tokenq.testnet").unwrap(),
+                options: None
+            },
+            Hierarchy {
+                target_hash: Base58CryptoHash::from_str("5vXhcBEwVqSeYzkDbckEfrvxMG3zp9Y9QkYWqfStn6aE").unwrap(),
+                account_id: AccountId::from_str("tokenq.testnet").unwrap(),
+                options: None
+            },
+        ];
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).unwrap();
+        let hash = env::sha256(&("bhc11.testnet".to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
+        println!("{:?}", hash)
+    }
+
+    #[test]
+    pub fn test_share_view() {
+        let hierarchies = vec![
+            Hierarchy {
+                target_hash: Base58CryptoHash::from_str("5EVZZTdCcMQ6Di5fq2Zw1HuFd4chQ9KK4DG3byVwiSyp").unwrap(),
+                account_id: AccountId::from_str("tokenq.testnet").unwrap(),
+                options: None
+            },
+            Hierarchy {
+                target_hash: Base58CryptoHash::from_str("6UjBiuEVunhN5t36wERYbpVTdRW5oCYjGKGp23hmQRkF").unwrap(),
+                account_id: AccountId::from_str("tokenq.testnet").unwrap(),
+                options: None
+            },
+            Hierarchy {
+                target_hash: Base58CryptoHash::from_str("5vXhcBEwVqSeYzkDbckEfrvxMG3zp9Y9QkYWqfStn6aE").unwrap(),
+                account_id: AccountId::from_str("tokenq.testnet").unwrap(),
+                options: None
+            }
+        ];
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).unwrap();
+        let hash = env::sha256(&("testdrip0830.testnet".to_string() + "viewed" + &hierarchy_hash + "through" + "tokenq.testnet").into_bytes());
+        println!("{:?}", hash)
+        
     }
 
 }

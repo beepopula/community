@@ -31,6 +31,10 @@ impl Community {
         Promise::new(env::current_account_id()).delete_account(sender);
     }
 
+    pub fn get_access_limit(&self) -> AccessLimit {
+        self.access.clone()
+    }
+
     #[payable]
     pub fn set_access_limit(&mut self, access: AccessLimit) {
         assert_one_yocto();

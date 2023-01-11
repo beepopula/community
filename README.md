@@ -12,7 +12,7 @@ Exploring The Code
 * `args`: Some customized arguments.
 * `accounts`: Includes Points, deposit, and any possible arguments.
 * `content_tree`: Tree map for large scale contents, for now it stores posts, comments.  
-* `relationship_tree`: Tree map for like, share and follow actions.
+* `relationship_tree`: Tree map for like, invite and follow actions.
 * `reports`: To record who's reporting user contents.
 * `drip`: Functions to give users points.
 * `role_management`: A set of permissions that a user or an admin can do.

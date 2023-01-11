@@ -74,7 +74,7 @@ pub enum StorageKey {
     Roles
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(crate = "near_sdk::serde")]
 #[derive(BorshDeserialize, BorshSerialize, BorshStorageKey)]
 pub enum AccessLimit {
@@ -153,11 +153,36 @@ impl Community {
     }
     
     #[payable]
-    pub fn join(&mut self) {
+    pub fn join(&mut self, inviter_id: Option<AccountId>) {
+        assert!(env::attached_deposit() >= 2000000000000000000000, "not enough deposit");
         let sender_id = env::predecessor_account_id();
-        let mut account = self.accounts.get(&sender_id).unwrap_or_default();
-        account.set_registered(true);
-        self.accounts.insert(&sender_id, &account);
+        match self.accounts.get(&sender_id) {
+            Some(mut account)=> {
+                account.set_registered(true);
+                self.accounts.insert(&sender_id, &account);
+                return
+            },
+            None => {
+                let mut account = Account::default();
+                account.set_registered(true);
+                self.accounts.insert(&sender_id, &account);
+            }
+        }
+
+        if let Some(inviter_id) = inviter_id {
+            let invite_hash = env::sha256(&(inviter_id.to_string() + "invite" + &sender_id.to_string()).into_bytes());
+            let exist = self.relationship_tree.check_and_set(&invite_hash, 0);
+            if !exist {
+                let drips = self.drip.set_invite_drip(inviter_id.clone(), sender_id.clone());
+                Event::log_invite(
+                    inviter_id, 
+                    sender_id, 
+                    Some(json!({
+                        "drips": drips
+                    }).to_string())
+                )
+            } 
+        }
     }
 
     #[payable]
@@ -166,12 +191,8 @@ impl Community {
         let sender_id = env::predecessor_account_id();
         let account = self.accounts.get(&sender_id);
         if let Some(mut account) = account {
-            if account.get_drip() == 0 {
-                self.accounts.remove(&sender_id);
-            } else {
-                account.set_registered(false);
-                self.accounts.insert(&sender_id, &account);
-            }
+            account.set_registered(false);
+            self.accounts.insert(&sender_id, &account);
         }
     }
 
@@ -191,7 +212,10 @@ impl Community {
     pub fn collect_drip(&mut self) -> U128 {
         assert_one_yocto();
         let sender_id = env::signer_account_id();
-        self.drip.get_and_clear_drip(sender_id)
+        if let Some(_) = self.accounts.get(&sender_id) {
+            return self.drip.get_and_clear_drip(sender_id)
+        }
+        U128::from(0)
     }
 }
 

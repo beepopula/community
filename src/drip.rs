@@ -25,11 +25,10 @@ pub fn get_map_value(key: &String) -> u128 {
         // "content4": "40000000000000000000000",     //subcomment to post         passive
         "content5":    "400000000000000000000000",    //subcomment to comment      passive
         "like":        "200000000000000000000000",         //like                       active
-        "share":     "10000000000000000000000000",        //share                      active for inviter
-        // "be_shared":    "50000000000000000000000",    //be_shared                  passive
+        "invite":     "10000000000000000000000000",        //invite                      active for inviter
         "be_liked":    "200000000000000000000000",     //be_liked                   passive
-        "report":      "400000000000000000000000",      //report                     passive
-        "report_refund": "200000000000000000000000",//report_refund             passive
+        "report":     "2000000000000000000000000",      //report                     passive
+        "report_refund": "1000000000000000000000000",//report_refund             passive
     }).to_string()).unwrap();
     let val = *map.get(key).unwrap_or(&(U128::from(0)));
     val.0
@@ -94,8 +93,11 @@ impl Drip {
 
         let key = "content".to_string() + &(len).to_string();
         let mut per = 100;
-        if let Some(prev_content_count) = prev_content_count {
-            per = get_content_decay(prev_content_count);
+        // only comment can be doubled
+        if let Some(prev_content_count) = prev_content_count{
+            if len == 1 {   
+                per = get_content_decay(prev_content_count);
+            }
         }
 
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
@@ -150,25 +152,17 @@ impl Drip {
         self.set_drip(key, None, &account_id, 100)
     }
 
-    pub fn set_share_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
-        let content_account_id = hierarchies.get(hierarchies.len() - 1).unwrap().account_id.clone();
-        if content_account_id == account_id {
+    pub fn set_invite_drip(&mut self, inviter_id: AccountId, invitee_id: AccountId) -> Vec<(AccountId, String, U128)> {
+        if inviter_id == invitee_id {
             return vec![]
         }
-        let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
-
-        let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
-        let key = "be_shared".to_string();
-        let items = self.set_drip(key, hierarchy.options.clone(), &content_account_id, 100);
-        drip_items = [drip_items, items].concat();
-
-        let key = "share".to_string();
-        match self.accounts.get(&account_id) {
+        let key = "invite".to_string();
+        match self.accounts.get(&invitee_id) {
             Some(_) => {
-                let items = self.set_drip(key, None, &account_id, 100);
-                [drip_items, items].concat()
+                let items = self.set_drip(key, None, &invitee_id, 100);
+                items
             },
-            None => drip_items
+            None => vec![]
         }
     }
 
