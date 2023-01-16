@@ -157,13 +157,7 @@ impl Drip {
             return vec![]
         }
         let key = "invite".to_string();
-        match self.accounts.get(&invitee_id) {
-            Some(_) => {
-                let items = self.set_drip(key, None, &invitee_id, 100);
-                items
-            },
-            None => vec![]
-        }
+        self.set_drip(key, None, &inviter_id, 100)
     }
 
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> U128 {

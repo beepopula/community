@@ -28,8 +28,11 @@ impl Community {
         self.drip.get_account_decay(account_id)
     }
 
-    pub fn get_account(&self, account_id: AccountId) -> HashMap<String, String> {
-        self.accounts.get(&account_id).unwrap().data
+    pub fn get_account(&self, account_id: AccountId) -> Option<HashMap<String, String>> {
+        match self.accounts.get(&account_id) {
+            Some(v) => Some(v.data),
+            None => None
+        }
     }
 
     pub fn get_content_decay(&self, hierarchies: Vec<Hierarchy>) -> u32 {
@@ -45,10 +48,10 @@ impl Community {
         self.drip.get_content_decay(content_count as u32)
     }
 
-    pub fn check_invited(&self, inviter_id: AccountId, invitee_id: AccountId) -> bool {
-        let view_hash = env::sha256(&(inviter_id.to_string() + "invite" + &invitee_id.to_string()).into_bytes());
-        self.relationship_tree.check(&view_hash)
-    }
+    // pub fn check_invited(&self, inviter_id: AccountId, invitee_id: AccountId) -> bool {
+    //     let view_hash = env::sha256(&(inviter_id.to_string() + "invite" + &invitee_id.to_string()).into_bytes());
+    //     self.relationship_tree.check(&view_hash)
+    // }
 
     pub fn get_global_role(&self) -> (Vec<Permission>, Vec<(Relationship, Option<Access>)>) {
         let mut keys = vec![];
