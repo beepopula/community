@@ -1,4 +1,4 @@
-use near_non_transferrable_token::fungible_token::receiver::FungibleTokenReceiver as NtftReceiver;
+use near_non_transferable_token::fungible_token::receiver::FungibleTokenReceiver as NtftReceiver;
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as FtReceiver;
 

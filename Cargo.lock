@@ -230,7 +230,7 @@ dependencies = [
  "ed25519-dalek",
  "near-contract-standards",
  "near-fixed-bit-tree",
- "near-non-transferrable-token",
+ "near-non-transferable-token",
  "near-sdk",
  "uint",
 ]
@@ -540,7 +540,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "near-non-transferrable-token"
+name = "near-non-transferable-token"
 version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22f88e75093563149c28bd43fbabffc71d878d80437cec6a5c56b8cdfaa8c852"
