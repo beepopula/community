@@ -107,10 +107,7 @@ impl Community {
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Like), "not allowed");
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         let exist = self.relationship_tree.check_and_set(&hash, 0);
         let mut drips = Vec::new();
@@ -128,10 +125,7 @@ impl Community {
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Unlike), "not allowed");
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
 
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         let hash: CryptoHash = hash[..].try_into().unwrap();
@@ -144,10 +138,7 @@ impl Community {
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap().try_to_vec().unwrap();
         self.content_tree.del(&hierarchy_hash);
         Event::log_del_content(hierarchies, None);
@@ -160,11 +151,7 @@ impl Community {
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id) || sender_id == self.owner_id, "not allowed");
 
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
-
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
         let mut drips = vec![];
@@ -212,10 +199,7 @@ impl Community {
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
 
         self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());

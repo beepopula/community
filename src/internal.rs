@@ -11,10 +11,7 @@ impl Community {
         let content_account_id = hierarchy.account_id.clone();
         assert!(content_account_id != sender_id, "can not be content owner");
 
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, &self.content_tree) {
-            Some(v) => v,
-            None => get_content_hash(hierarchies.clone(), Some("encrypted".to_string()), &self.content_tree).expect("content not found")
-        };
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
 
         let mut report_accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
