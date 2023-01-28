@@ -97,6 +97,10 @@ impl Drip {
         if let Some(prev_content_count) = prev_content_count{
             if len == 1 {   
                 per = get_content_decay(prev_content_count);
+                let post = hierarchies.get(0).unwrap();
+                if per > 100 && post.account_id == account_id {
+                    per = 100
+                }
             }
         }
 
