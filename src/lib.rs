@@ -154,6 +154,7 @@ impl Community {
     
     #[payable]
     pub fn join(&mut self, inviter_id: Option<AccountId>) {
+        let initial_storage_usage = env::storage_usage();
         if let AccessLimit::Free = self.access {
             return
         }
@@ -181,7 +182,7 @@ impl Community {
             }
         }
 
-        
+        log!("{:?}", env::storage_usage() - initial_storage_usage)
     }
 
     #[payable]
