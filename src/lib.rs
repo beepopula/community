@@ -158,7 +158,7 @@ impl Community {
         if let AccessLimit::Free = self.access {
             return
         }
-        assert!(env::attached_deposit() >= 2000000000000000000000, "not enough deposit");
+        assert!(env::attached_deposit() >= 50000000000000000000000, "not enough deposit");
         let sender_id = env::predecessor_account_id();
         match self.accounts.get(&sender_id) {
             Some(mut account)=> {

@@ -5,6 +5,7 @@ const REGISTERED: &str = "registered";
 const DRIP: &str = "drip";
 const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
+const TOTAL_CONTENT_COUNT: &str = "total_content_count";
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
@@ -41,6 +42,7 @@ impl Default for Account {
         this.data.insert(DRIP.to_string(), 0.to_string());
         this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
         this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
+        this.data.insert(TOTAL_CONTENT_COUNT.to_string(), 0.to_string());
         this
     }
 }
@@ -55,6 +57,7 @@ impl Account {
         this.data.insert(DRIP.to_string(), 0.to_string());
         this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
         this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
+        this.data.insert(TOTAL_CONTENT_COUNT.to_string(), 0.to_string());
         this
     }
 
@@ -115,6 +118,8 @@ impl Account {
         }
         let content_count: u32 = (self.data.get(&CONTENT_COUNT.to_string()).unwrap_or(&0.to_string())).parse().unwrap();
         self.data.insert(CONTENT_COUNT.to_string(), (content_count + 1).to_string());
+        let total_content_count: u32 = (self.data.get(&TOTAL_CONTENT_COUNT.to_string()).unwrap_or(&0.to_string())).parse().unwrap();
+        self.data.insert(TOTAL_CONTENT_COUNT.to_string(), (total_content_count + 1).to_string());
     }
 
 
