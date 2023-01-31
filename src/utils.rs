@@ -3,6 +3,7 @@
 use std::convert::TryFrom;
 
 use ed25519_dalek::Verifier;
+use near_fixed_bit_tree::BitTree;
 use near_sdk::{Balance, StorageUsage, Promise, log};
 
 use crate::*;
@@ -62,8 +63,89 @@ pub(crate) fn get_root_id(contract_id: AccountId) -> AccountId {
     AccountId::try_from(root_id).unwrap()
 }
 
+pub(crate) fn get_and_reset_old_data(key: &[u8]) -> Option<Vec<u8>> {
+    let mut val = None;
+    for i in 0..2 {
+        let mut bit_tree = BitTree::new(28, vec![i], u16::BITS as u8);
+        val = match bit_tree.get(key) {
+            Some(v) => {
+                bit_tree.del(key);
+                Some(v.try_to_vec().unwrap())
+            },
+            None => {
+                continue
+            }
+        };
+    }
+    val
+}
 
-pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>, tree: &BitTree) -> Option<String> {
+pub(crate) fn check_and_reset_old_data(key: &[u8]) -> bool {
+    let mut val = false;
+    for i in 0..2 {
+        let mut bit_tree = BitTree::new(28, vec![i], u16::BITS as u8);
+        val = match bit_tree.get(key) {
+            Some(_) => {
+                bit_tree.del(key);
+                true
+            },
+            None => {
+                continue
+            }
+        };
+    }
+    val
+}
+
+pub(crate) fn set<T>(key: &[u8], val: T) 
+where T: BorshSerialize + BorshDeserialize
+{
+    env::storage_write(key, &val.try_to_vec().unwrap());
+}
+
+pub(crate) fn get<T>(key: &[u8]) -> Option<T> 
+where T: BorshSerialize + BorshDeserialize
+{
+    match env::storage_read(key) {
+        Some(mut v) => {
+            log!("{:?}", v);
+            Some(BorshDeserialize::deserialize(&mut v.as_slice()).unwrap())
+        },
+        None => match get_and_reset_old_data(key) {
+            Some(old_val) => Some(T::try_from_slice(&old_val).unwrap()),
+            None => None
+        }
+    }
+}
+
+pub(crate) fn check(key: &[u8]) -> bool {
+    match env::storage_has_key(key) {
+        true => true,
+        false => {
+            check_and_reset_old_data(key)
+        }
+    }
+}
+
+pub(crate) fn remove(key: &[u8]) {
+    if !env::storage_remove(key) {
+        check_and_reset_old_data(key);
+    }
+}
+
+pub(crate) fn check_and_set<T>(key: &[u8], val: T) -> bool 
+where T: BorshSerialize + BorshDeserialize
+{
+    let check = check(key);
+    if !check {
+        check_and_reset_old_data(key);
+    }
+    set(key, val);
+    check
+}
+
+
+pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>) -> Option<String> {
     let mut hash_prefix = "".to_string();
     for (_, hierarchy) in hierarchies.iter().enumerate() {
         let mut hierarchy_str = hash_prefix + &hierarchy.account_id.to_string() + &String::from(&hierarchy.target_hash);
@@ -74,7 +156,7 @@ pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String
             hierarchy_str += &extra;
         }
         let hierarchy_hash = env::sha256(&hierarchy_str.into_bytes());
-        if !tree.check(&hierarchy_hash) {
+        if !check(&hierarchy_hash) {
             return None
         }
         let hierarchy_hash: [u8;32] = hierarchy_hash[..].try_into().unwrap();
@@ -83,7 +165,7 @@ pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String
     Some(hash_prefix)
 }
 
-pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: String, options:Option<HashMap<String, String>>, extra: Option<String>, tree: &mut BitTree) -> Base58CryptoHash {
+pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: String, options:Option<HashMap<String, String>>, extra: Option<String>) -> Base58CryptoHash {
     let args = args.clone() + &env::block_timestamp().to_string();    //&bs58::encode(env::block_timestamp()).into_string();
     let target_hash = env::sha256(&args.clone().into_bytes());
     let target_hash: [u8;32] = target_hash[..].try_into().unwrap();
@@ -99,7 +181,7 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
     let hash = env::sha256(&hierarchy_str.into_bytes());
     //let hash: CryptoHash = hash[..].try_into().unwrap();
     
-    tree.set(&hash, 0);
+    set(&hash, 0);
     Base58CryptoHash::from(target_hash)
 }
 
@@ -134,4 +216,20 @@ where T: std::str::FromStr
 pub(crate) fn get_access_limit() -> AccessLimit {
     let this: Community = env::state_read().unwrap();
     this.access
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use near_sdk::borsh::{BorshSerialize, BorshDeserialize};
+
+    
+
+    #[test]
+    pub fn test() {
+        let a1 = (50 as u32).try_to_vec().unwrap();
+        let a2: u8 = BorshDeserialize::deserialize(&mut a1.as_slice()).unwrap();
+        print!("{:?}, {:?}", a1, a2);
+    }
 }

@@ -5,8 +5,9 @@ use std::convert::TryInto;
 use std::str::FromStr;
 
 use account::Account;
-use near_fixed_bit_tree::BitTree;
+// use near_fixed_bit_tree::BitTree;
 use events::Event;
+use near_fixed_bit_tree::BitTree;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
@@ -15,7 +16,7 @@ use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise,
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
 use role::{RoleManagement};
-use utils::{refund_extra_storage_deposit};
+use utils::{refund_extra_storage_deposit, set, remove};
 use crate::post::Hierarchy;
 use crate::utils::{get_arg, get_access_limit};
 use std::convert::TryFrom;
@@ -44,8 +45,6 @@ pub struct Community {
     owner_id: AccountId,
     args: HashMap<String, String>,
     accounts: LookupMap<AccountId, Account>,
-    content_tree: BitTree,
-    relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
     role_management: RoleManagement,
@@ -61,7 +60,8 @@ pub struct OldCommunity {
     relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
-    roles: Vec<u8>
+    role_management: RoleManagement,
+    access: AccessLimit
 }
 
 
@@ -101,8 +101,8 @@ impl Community {
             owner_id: owner_id.clone(),
             args,
             accounts: LookupMap::new(StorageKey::Account),
-            content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
-            relationship_tree: BitTree::new(28, vec![1], 0),
+            // content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
+            // relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
             role_management: RoleManagement::new(),
@@ -117,38 +117,32 @@ impl Community {
     #[init(ignore_state)]
     pub fn migrate() -> Self {
         let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
-        assert_eq!(
-            env::predecessor_account_id(),
-            prev.owner_id,
-            "Only owner"
-        );
-        let mut args = HashMap::new();
+        assert!(env::predecessor_account_id() == prev.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
         
         let this = Community {
-            owner_id: env::predecessor_account_id(),
-            args: args,
-            accounts: LookupMap::new(StorageKey::Account),
-            content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
-            relationship_tree: BitTree::new(28, vec![1], 0),
-            reports: UnorderedMap::new(b'r'),
-            drip: Drip::new(),
-            role_management: RoleManagement::new(),
-            access: AccessLimit::Registy
+            owner_id: prev.owner_id,
+            args: prev.args,
+            accounts: prev.accounts,
+            reports: prev.reports,
+            drip: prev.drip,
+            role_management: prev.role_management,
+            access: prev.access
         };
+        env::state_write::<Community>(&this);
         this
     }
 
     pub fn follow(&mut self, account_id: AccountId) {
         let sender_id = env::predecessor_account_id();
         let hash = env::sha256(&(sender_id.to_string() + "follwing" + &account_id.to_string()).into_bytes());
-        self.relationship_tree.set(&hash, 0);
+        set(&hash, 0);
         Event::log_follow(sender_id, account_id,None);
     }
 
     pub fn unfollow(&mut self, account_id: AccountId) {
         let sender_id = env::predecessor_account_id();
         let hash = env::sha256(&(sender_id.to_string() + "follwing" + &account_id.to_string()).into_bytes());
-        self.relationship_tree.del(&hash);
+        remove(&hash);
         Event::log_unfollow(sender_id, account_id, None);
     }
     

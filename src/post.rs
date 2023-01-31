@@ -2,7 +2,7 @@ use std::{convert::TryInto, str::FromStr};
 
 use near_sdk::CryptoHash;
 
-use crate::*;    
+use crate::{*, utils::{get, check_and_set}};    
 use utils::{get_content_hash, set_content};
 
 // #[derive(Serialize, Deserialize)]
@@ -74,19 +74,19 @@ impl Community {
 
         assert!(hierarchies.len() < MAX_LEVEL, "error");
 
-        let hash_prefix = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
-        let target_hash = set_content(args.clone(), sender_id.clone(), hash_prefix.clone(), options.clone(), None, &mut self.content_tree);
+        let hash_prefix = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let target_hash = set_content(args.clone(), sender_id.clone(), hash_prefix.clone(), options.clone(), None);
 
         let mut prev_content_count = None;
         if hierarchies.len() > 0 {
-            let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap());
-            let mut val = self.content_tree.get(&prev_hash).unwrap();
+            let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap()).to_vec();
+            let mut val: u8 = get(&prev_hash).unwrap();
             prev_content_count = Some(val.clone());
             val += 1;
             if val > 1 {
                 val = 1;
             }
-            self.content_tree.set(&prev_hash, val)
+            set(&prev_hash, val)
         }
 
         let drips = self.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), prev_content_count);
@@ -107,9 +107,9 @@ impl Community {
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Like), "not allowed");
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
-        let exist = self.relationship_tree.check_and_set(&hash, 0);
+        let exist = check_and_set(&hash, 0);
         let mut drips = Vec::new();
         if !exist {
             drips = self.drip.set_like_drip(hierarchies.clone(), sender_id);
@@ -125,11 +125,10 @@ impl Community {
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Unlike), "not allowed");
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
 
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
-        let hash: CryptoHash = hash[..].try_into().unwrap();
-        assert!(self.relationship_tree.check_and_set(&hash, 0), "illegal");
+        assert!(check_and_set(&hash, 0), "illegal");
         Event::log_unlike_content(hierarchies, None);
     }
 
@@ -138,9 +137,9 @@ impl Community {
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
-        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap().try_to_vec().unwrap();
-        self.content_tree.del(&hierarchy_hash);
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = CryptoHash::from(Base58CryptoHash::try_from(hierarchy_hash).unwrap()).to_vec();
+        remove(&hierarchy_hash);
         Event::log_del_content(hierarchies, None);
     }
 
@@ -151,13 +150,13 @@ impl Community {
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id) || sender_id == self.owner_id, "not allowed");
 
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
         let mut drips = vec![];
         match report {
             Report::Approve => {
-                self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
+                remove(&CryptoHash::from(hierarchy_hash).to_vec());
                 for account_id in accounts {
                     if account_id == sender_id {
                         continue
@@ -199,10 +198,10 @@ impl Community {
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, &self.content_tree).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
 
-        self.content_tree.del(&hierarchy_hash.try_to_vec().unwrap());
+        remove(&CryptoHash::from(hierarchy_hash).to_vec());
         Event::log_del_content(hierarchies, None);
     }
 }
@@ -222,19 +221,19 @@ pub extern "C" fn add_long_content() {
 
     assert!(hierarchies.len() < MAX_LEVEL, "error");
 
-    let hash_prefix = get_content_hash(hierarchies.clone(), None, &contract.content_tree).expect("content not found");
-    let target_hash = set_content(json!(args.clone()).to_string(), sender_id.clone(), hash_prefix.clone(), options.clone(), None, &mut contract.content_tree);
+    let hash_prefix = get_content_hash(hierarchies.clone(), None).expect("content not found");
+    let target_hash = set_content(json!(args.clone()).to_string(), sender_id.clone(), hash_prefix.clone(), options.clone(), None);
 
     let mut prev_content_count = None;
     if hierarchies.len() > 0 {
-        let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap());
-        let mut val = contract.content_tree.get(&prev_hash).unwrap();
+        let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap()).to_vec();
+        let mut val = get::<u8>(&prev_hash).unwrap();
         prev_content_count = Some(val.clone());
         val += 1;
         if val > 3 {
             val = 3;
         }
-        contract.content_tree.set(&prev_hash, val)
+        set(&prev_hash, val)
     }
 
     let drips = contract.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), prev_content_count);
