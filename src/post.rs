@@ -138,7 +138,9 @@ impl Community {
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
-        let hierarchy_hash = CryptoHash::from(Base58CryptoHash::try_from(hierarchy_hash).unwrap()).to_vec();
+        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
+        let hierarchy_hash = CryptoHash::from(hierarchy_hash).to_vec();
+        self.internal_report_refund(hierarchies.clone());
         remove(&hierarchy_hash);
         Event::log_del_content(hierarchies, None);
     }
@@ -176,12 +178,19 @@ impl Community {
 
             },
             Report::Ignore => {
-                for account_id in accounts {
-                    if account_id == sender_id {
-                        continue
-                    }
-                    drips = self.drip.set_report_refund_drip(hierarchies.clone(), account_id);
-                }
+                self.internal_report_refund(hierarchies);
+            }
+        }
+        
+    }
+
+    pub fn revoke_report(&mut self, hierarchies: Vec<Hierarchy>) {
+        let sender_id = env::predecessor_account_id();
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
+        if let Some(accounts) = self.reports.get(&hierarchy_hash) {
+            if let Some(_) = accounts.get(&sender_id) {
+                let drips = self.drip.set_report_refund_drip(hierarchies.clone(), sender_id);
                 Event::log_refund(
                     Some(json!({
                         "drips": drips
@@ -189,7 +198,6 @@ impl Community {
                 );
             }
         }
-        
     }
 
     pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
@@ -200,7 +208,7 @@ impl Community {
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-
+        self.internal_report_refund(hierarchies.clone());
         remove(&CryptoHash::from(hierarchy_hash).to_vec());
         Event::log_del_content(hierarchies, None);
     }
