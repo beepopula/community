@@ -176,7 +176,6 @@ impl Community {
             }
         }
 
-        log!("{:?}", env::storage_usage() - initial_storage_usage)
     }
 
     #[payable]

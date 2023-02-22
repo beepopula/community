@@ -38,7 +38,7 @@ impl Community {
     pub fn get_content_decay(&self, hierarchies: Vec<Hierarchy>) -> u32 {
         let mut content_count = 0;
         if hierarchies.len() > 0 {
-            let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+            let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
             let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hierarchy_hash).unwrap()).to_vec();
             content_count = get::<u8>(&prev_hash).unwrap();
         }

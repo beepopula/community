@@ -2,7 +2,7 @@ use std::{convert::TryInto, str::FromStr};
 
 use near_sdk::CryptoHash;
 
-use crate::{*, utils::{get, check_and_set}};    
+use crate::{*, utils::{get, check_and_set, check}};    
 use utils::{get_content_hash, set_content};
 
 // #[derive(Serialize, Deserialize)]
@@ -74,7 +74,7 @@ impl Community {
 
         assert!(hierarchies.len() < MAX_LEVEL, "error");
 
-        let hash_prefix = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hash_prefix = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
         let target_hash = set_content(args.clone(), sender_id.clone(), hash_prefix.clone(), options.clone(), None);
 
         let mut prev_content_count = None;
@@ -107,7 +107,7 @@ impl Community {
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Like), "not allowed");
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         let exist = check_and_set(&hash, 0);
         let mut drips = Vec::new();
@@ -125,7 +125,7 @@ impl Community {
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Unlike), "not allowed");
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
 
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         assert!(check_and_set(&hash, 0), "illegal");
@@ -137,10 +137,12 @@ impl Community {
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, false) {
+            Some(v) => v,
+            None => return
+        };
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let hierarchy_hash = CryptoHash::from(hierarchy_hash).to_vec();
-        self.internal_report_refund(hierarchies.clone());
         remove(&hierarchy_hash);
         Event::log_del_content(hierarchies, None);
     }
@@ -152,7 +154,13 @@ impl Community {
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id) || sender_id == self.owner_id, "not allowed");
 
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, false) {
+            Some(v) => v,
+            None => {
+                self.internal_report_refund(hierarchies);
+                return
+            }
+        };
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
         let mut drips = vec![];
@@ -186,7 +194,7 @@ impl Community {
 
     pub fn revoke_report(&mut self, hierarchies: Vec<Hierarchy>) {
         let sender_id = env::predecessor_account_id();
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         if let Some(accounts) = self.reports.get(&hierarchy_hash) {
             if let Some(_) = accounts.get(&sender_id) {
@@ -206,9 +214,11 @@ impl Community {
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, false) {
+            Some(v) => v,
+            None => return
+        };
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        self.internal_report_refund(hierarchies.clone());
         remove(&CryptoHash::from(hierarchy_hash).to_vec());
         Event::log_del_content(hierarchies, None);
     }
@@ -229,7 +239,7 @@ pub extern "C" fn add_long_content() {
 
     assert!(hierarchies.len() < MAX_LEVEL, "error");
 
-    let hash_prefix = get_content_hash(hierarchies.clone(), None).expect("content not found");
+    let hash_prefix = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
     let target_hash = set_content(json!(args.clone()).to_string(), sender_id.clone(), hash_prefix.clone(), options.clone(), None);
 
     let mut prev_content_count = None;

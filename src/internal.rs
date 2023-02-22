@@ -11,7 +11,7 @@ impl Community {
         let content_account_id = hierarchy.account_id.clone();
         assert!(content_account_id != sender_id, "can not be content owner");
 
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
 
         let mut report_accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
@@ -23,7 +23,7 @@ impl Community {
     }
 
     pub(crate) fn internal_report_refund(&mut self, hierarchies: Vec<Hierarchy>) {
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None).expect("content not found");
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("unknown");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         match self.reports.get(&hierarchy_hash) {
             Some(accounts) => {

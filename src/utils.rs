@@ -70,6 +70,7 @@ pub(crate) fn get_and_reset_old_data(key: &[u8]) -> Option<Vec<u8>> {
         val = match bit_tree.get(key) {
             Some(v) => {
                 bit_tree.del(key);
+                set(key, v.try_to_vec().unwrap());
                 Some(v.try_to_vec().unwrap())
             },
             None => {
@@ -85,8 +86,9 @@ pub(crate) fn check_and_reset_old_data(key: &[u8]) -> bool {
     for i in 0..2 {
         let mut bit_tree = BitTree::new(28, vec![i], u16::BITS as u8);
         val = match bit_tree.get(key) {
-            Some(_) => {
+            Some(v) => {
                 bit_tree.del(key);
+                set(key, v.try_to_vec().unwrap());
                 true
             },
             None => {
@@ -145,7 +147,7 @@ where T: BorshSerialize + BorshDeserialize
 }
 
 
-pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>) -> Option<String> {
+pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String>, only_hash: bool) -> Option<String> {
     let mut hash_prefix = "".to_string();
     for (_, hierarchy) in hierarchies.iter().enumerate() {
         let mut hierarchy_str = hash_prefix + &hierarchy.account_id.to_string() + &String::from(&hierarchy.target_hash);
@@ -156,7 +158,7 @@ pub(crate) fn get_content_hash(hierarchies: Vec<Hierarchy>, extra: Option<String
             hierarchy_str += &extra;
         }
         let hierarchy_hash = env::sha256(&hierarchy_str.into_bytes());
-        if !check(&hierarchy_hash) {
+        if !only_hash && !check(&hierarchy_hash) {
             return None
         }
         let hierarchy_hash: [u8;32] = hierarchy_hash[..].try_into().unwrap();
