@@ -144,13 +144,11 @@ impl Account {
         if let Some(new_balance) = balance.checked_sub(amount) {
             balance = new_balance;
         } else {
-            balance = 0
+            panic!("not enough balance");
         }
         let balance: U128 = balance.into();
         self.data.insert(json!(deposit).to_string(), json!(balance).to_string());
     }
-
-
 ////////////////////////////////////////////////////////  Report Part ////////////////////////////////////////////////////////////////
 
     // pub fn report_deposit(&mut self, amount: )

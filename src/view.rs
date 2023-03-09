@@ -93,7 +93,6 @@ impl Community {
     #[cfg(feature = "unstable")]
     pub fn get_decode_content(&self, hash: Vec<u8>, sign: Vec<u8>) {
         let ret = env::ecrecover(&hash, &sign, 32, false);
-        log!("{:?}", ret);
     }
     
 }

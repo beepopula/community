@@ -16,9 +16,9 @@ use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise,
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
 use role::{RoleManagement};
-use utils::{refund_extra_storage_deposit, set, remove};
+use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage};
 use crate::post::Hierarchy;
-use crate::utils::{get_arg, get_access_limit};
+use crate::utils::{get_arg, get_access_limit, verify};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -38,6 +38,8 @@ pub mod resolver;
 pub mod internal;
 pub mod metadata;
 
+
+const JOIN_DEPOSIT: u128 = 50000000000000000000000;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -110,6 +112,7 @@ impl Community {
         };
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
+        account.increase_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
         this.accounts.insert(&owner_id, &account);
         this
     }
@@ -152,29 +155,37 @@ impl Community {
         if let AccessLimit::Free = self.access {
             return
         }
-        assert!(env::attached_deposit() >= 50000000000000000000000, "not enough deposit");
+        match self.access {
+            AccessLimit::Free => {},
+            _ => assert!(env::attached_deposit() >= JOIN_DEPOSIT, "not enough deposit")
+        }
+        
         let sender_id = env::predecessor_account_id();
-        match self.accounts.get(&sender_id) {
+        let mut account = match self.accounts.get(&sender_id) {
             Some(mut account)=> {
                 account.set_registered(true);
-                self.accounts.insert(&sender_id, &account);
+                account
             },
             None => {
                 let mut account = Account::default();
                 account.set_registered(true);
-                self.accounts.insert(&sender_id, &account);
                 if let Some(inviter_id) = inviter_id {
                     let drips = self.drip.set_invite_drip(inviter_id.clone(), sender_id.clone());
                     Event::log_invite(
                         inviter_id, 
-                        sender_id, 
+                        sender_id.clone(), 
                         Some(json!({
                             "drips": drips
                         }).to_string())
                     )
                 }
+                account
             }
-        }
+        };
+        account.increase_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+        self.accounts.insert(&sender_id, &account);
+        set_storage_usage(initial_storage_usage, None);
+        
 
     }
 
@@ -192,26 +203,44 @@ impl Community {
         }
     }
 
-    pub fn withdraw(&mut self, deposit: Deposit, amount: U128) {
+    #[payable]
+    pub fn deposit(&mut self) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        match deposit {
-            Deposit::FT(account_id) => {
-                let mut account = self.accounts.get(&sender_id).unwrap_or_default();
-                account.decrease_deposit(Deposit::FT(account_id), amount.0);
-                self.accounts.insert(&sender_id, &account);
-            }
-            _ => {}
-        }
+        let mut account = self.accounts.get(&sender_id).unwrap();
+        account.increase_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+        self.accounts.insert(&sender_id, &account);
+        set_storage_usage(initial_storage_usage, None);
+    }
+
+    pub fn withdraw(&mut self, amount: U128) {
+        let sender_id = env::predecessor_account_id();
+        let mut account = self.accounts.get(&sender_id).unwrap_or_default();
+        account.decrease_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), amount.0);
+        self.accounts.insert(&sender_id, &account);
+        Promise::new(sender_id).transfer(amount.0);
     }
 
     #[payable]
     pub fn collect_drip(&mut self) -> U128 {
         assert_one_yocto();
         let sender_id = env::signer_account_id();
-        if let Some(_) = self.accounts.get(&sender_id) {
-            return self.drip.get_and_clear_drip(sender_id)
-        }
-        U128::from(0)
+        assert!(self.accounts.get(&sender_id).is_some(), "account not found");
+        self.drip.get_and_clear_drip(sender_id)
+    }
+
+    #[payable]
+    pub fn collect_drip_from_non_near_account(&mut self, account_id: AccountId, sign: String, timestamp: U64) -> U128 {
+        assert_one_yocto();
+        assert!(self.accounts.get(&account_id).is_some(), "account not found");
+        let timestamp = u64::from(timestamp);
+        assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
+        let sender_id = env::signer_account_id();
+        let message = (account_id.to_string() + &sender_id.to_string() + &timestamp.to_string()).as_bytes().to_vec();
+        let sign = bs58::decode(sign).into_vec().unwrap();
+        let pk = account_id.as_bytes().to_vec();
+        assert!(verify(message, sign, pk), "not verified");
+        self.drip.get_and_clear_drip(account_id)
     }
 }
 

@@ -57,7 +57,7 @@ impl Community {
 
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
         // TODO: avoid hash collision through a loop
-        
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         let mut check_encryption_content_permission = false;
         if let Some(options) = options.clone() {
@@ -101,10 +101,12 @@ impl Community {
                 "drips": drips
             }).to_string())
         );
+        set_storage_usage(initial_storage_usage, None);
         target_hash
     }
 
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Like), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
@@ -120,9 +122,11 @@ impl Community {
                 "drips": drips
             }).to_string())
         );
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Unlike), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
@@ -130,9 +134,11 @@ impl Community {
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         assert!(check_and_set(&hash, 0), "illegal");
         Event::log_unlike_content(hierarchies, None);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn del_content(&mut self, hierarchies: Vec<Hierarchy>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
@@ -145,9 +151,11 @@ impl Community {
         let hierarchy_hash = CryptoHash::from(hierarchy_hash).to_vec();
         remove(&hierarchy_hash);
         Event::log_del_content(hierarchies, None);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, report: Report) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
 
@@ -163,15 +171,16 @@ impl Community {
         };
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
+        self.reports.remove(&hierarchy_hash);
         let mut drips = vec![];
         match report {
             Report::Approve => {
                 remove(&CryptoHash::from(hierarchy_hash).to_vec());
-                for account_id in accounts {
-                    if account_id == sender_id {
+                for account_id in &accounts {
+                    if *account_id == sender_id {
                         continue
                     }
-                    drips = self.drip.set_report_drip(hierarchies.clone(), account_id);
+                    drips = self.drip.set_report_drip(hierarchies.clone(), account_id.clone());
                 }
                 Event::log_del_content(
                     hierarchies,
@@ -179,7 +188,7 @@ impl Community {
                         "drips": drips
                     }).to_string())
                 );
-                
+                set_storage_usage(initial_storage_usage, Some(accounts.iter().next().unwrap().clone()));
                 //self.drip.set_report_confirm_drip(sender_id);
             },
             Report::Disapprove => {
@@ -190,9 +199,11 @@ impl Community {
             }
         }
         
+        
     }
 
     pub fn revoke_report(&mut self, hierarchies: Vec<Hierarchy>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
@@ -206,9 +217,12 @@ impl Community {
                 );
             }
         }
+        self.reports.remove(&hierarchy_hash);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelOthersContent), "not allowed");
 
@@ -221,6 +235,7 @@ impl Community {
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         remove(&CryptoHash::from(hierarchy_hash).to_vec());
         Event::log_del_content(hierarchies, None);
+        set_storage_usage(initial_storage_usage, None);
     }
 }
 
@@ -228,6 +243,7 @@ impl Community {
 #[no_mangle]
 pub extern "C" fn add_long_content() {
     env::setup_panic_hook();
+    let initial_storage_usage = env::storage_usage();
     let raw_input = env::input().unwrap();
     let args_length = u32::from_le_bytes(raw_input[0..4].try_into().unwrap());
     let args: InputArgs = serde_json::from_slice(&raw_input[4..(args_length as usize + 4)]).unwrap();
@@ -266,6 +282,7 @@ pub extern "C" fn add_long_content() {
             "drips": drips
         }).to_string())
     );
+    set_storage_usage(initial_storage_usage, None);
     // String::from(&target_hash)
 }
 

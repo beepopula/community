@@ -17,9 +17,9 @@ impl Community {
         let mut report_accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
         assert!(report_accounts.len() < 5, "can not report");
         assert!(!report_accounts.contains(&sender_id), "already report");
-        report_accounts.insert(sender_id);
+        report_accounts.insert(sender_id.clone());
         self.reports.insert(&hierarchy_hash, &report_accounts);
-        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0)
+        set_storage_usage(initial_storage_usage, Some(sender_id));
     }
 
     pub(crate) fn internal_report_refund(&mut self, hierarchies: Vec<Hierarchy>) {

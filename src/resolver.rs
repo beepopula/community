@@ -53,6 +53,7 @@ impl FtReceiver for Community {
 #[near_bindgen]
 impl NtftReceiver for Community {
 
+    #[payable]
     fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {

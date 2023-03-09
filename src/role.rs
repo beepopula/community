@@ -105,14 +105,14 @@ impl RoleManagement {
 #[near_bindgen]
 impl Community {
 
-    #[payable]
     pub fn set_global_role(&mut self, permissions: Vec<Permission>, options: Vec<(Relationship, Option<Access>)>) {
+        let initial_storage_usage = env::storage_usage();
         for i in 0..permissions.len() {
             self.role_management.global_role.insert(permissions[i].clone(), options[i].clone());
         }
+        set_storage_usage(initial_storage_usage, None);
     }
 
-    #[payable]
     pub fn add_role(&mut self, alias: String, permissions: Vec<Permission>, mod_level: u32, override_level: u32) -> String {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
@@ -135,13 +135,12 @@ impl Community {
 
         self.role_management.roles.insert(hash.clone(), role);
 
-        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
+        set_storage_usage(initial_storage_usage, None);
 
         hash
     }
 
 
-    #[payable]
     pub fn set_role(&mut self, hash: String, alias: Option<String>, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
@@ -171,18 +170,16 @@ impl Community {
             }
         }
         self.role_management.roles.insert(hash, role);
-        let storage_usage = match env::storage_usage().checked_sub(initial_storage_usage) {
-            Some(storage_usage) => storage_usage,
-            None => 0,
-        };
-        refund_extra_storage_deposit(storage_usage, 0);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn remove_role(&mut self, hash: String) {
+        let initial_storage_usage = env::storage_usage();
         Base58CryptoHash::try_from(hash.clone()).unwrap();    //exclude "all" and "ban"
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::DelRole(Some(hash.clone()))), "not allowed");
         self.role_management.roles.remove(&hash);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     #[payable]
@@ -198,10 +195,11 @@ impl Community {
             }
             role_members.insert(&account_id, &options.unwrap_or(HashMap::new()));
         }
-        refund_extra_storage_deposit(env::storage_usage() - initial_storage_usage, 0);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn remove_member_from_role(&mut self, hash: String, members: Vec<AccountId>) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
@@ -209,9 +207,9 @@ impl Community {
         for account_id in members {
             role_members.remove(&account_id);
         }
+        set_storage_usage(initial_storage_usage, None);
     }
 
-    #[payable]
     pub fn set_members(&mut self, add: HashMap<String, Vec<AccountId>>, remove: HashMap<String, Vec<AccountId>>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
@@ -248,11 +246,7 @@ impl Community {
                 role_members.remove(&account_id);
             }
         }
-        let storage_usage = match env::storage_usage().checked_sub(initial_storage_usage) {
-            Some(storage_usage) => storage_usage,
-            None => 0,
-        };
-        refund_extra_storage_deposit(storage_usage, 0);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {

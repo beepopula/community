@@ -27,7 +27,7 @@ pub(crate) fn refund_extra_storage_deposit(storage_used: StorageUsage, used_bala
     }
 }
 
-pub(crate) fn verify(message: Vec<u8>, sign: Vec<u8>, pk: Vec<u8>) {
+pub(crate) fn verify(message: Vec<u8>, sign: Vec<u8>, pk: Vec<u8>) -> bool {
     let pk = ed25519_dalek::PublicKey::from_bytes(&pk).unwrap();
     if sign.len() != 64 {
         panic!("Invalid signature data length.");
@@ -38,8 +38,8 @@ pub(crate) fn verify(message: Vec<u8>, sign: Vec<u8>, pk: Vec<u8>) {
     }
     let sign = ed25519_dalek::Signature::try_from(sig_data).unwrap();
     match pk.verify(&message, &sign) {
-        Ok(_) => log!("verify ok"),
-        Err(_) => panic!("verify error"),
+        Ok(_) => true,
+        Err(_) => false,
     }
 }
 
@@ -110,7 +110,6 @@ where T: BorshSerialize + BorshDeserialize
 {
     match env::storage_read(key) {
         Some(mut v) => {
-            log!("{:?}", v);
             Some(BorshDeserialize::deserialize(&mut v.as_slice()).unwrap())
         },
         None => match get_and_reset_old_data(key) {
@@ -220,6 +219,25 @@ pub(crate) fn get_access_limit() -> AccessLimit {
     this.access
 }
 
+
+pub(crate) fn set_storage_usage(initial_storage_usage: u64, account_id: Option<AccountId>) {
+    let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+    let account_id = match account_id {
+        Some(account_id) => account_id,
+        None => env::predecessor_account_id()
+    };
+    let mut account = accounts.get(&account_id).unwrap();
+    let deposit = Deposit::FT(AccountId::from_str("near").unwrap());
+    let current_storage_usage = env::storage_usage();
+    if current_storage_usage > initial_storage_usage {
+        let storage_usage = current_storage_usage - initial_storage_usage;
+        account.decrease_deposit(deposit, storage_usage as u128 * env::storage_byte_cost());
+    } else {
+        let storage_usage = initial_storage_usage - current_storage_usage;
+        account.increase_deposit(deposit, storage_usage as u128 * env::storage_byte_cost())
+    }
+    accounts.insert(&account_id, &account);
+}
 
 
 #[cfg(test)]
