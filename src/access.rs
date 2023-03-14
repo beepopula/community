@@ -1,5 +1,5 @@
 use crate::*;
-use account::Deposit;
+use account::AssetKey;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct Access
 pub enum Condition {
     FTCondition(FTCondition),
     NFTCondition(NFTCondition),
-    DripCondition(DripCondition)
+    DripCondition(DripCondition),
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -44,7 +44,7 @@ pub struct NFTCondition {
 #[serde(crate = "near_sdk::serde")]
 #[derive(Debug, Clone)]
 pub struct DripCondition {
-    pub token_id: AccountId,
+    pub token_id: Option<AccountId>,    //for total drips
     pub contract_id: AccountId,
     pub amount_to_access: U128,
 }
@@ -73,11 +73,11 @@ impl Access {
         for condition in self.conditions.iter() {
             let access = match condition {
                 Condition::FTCondition(ft) => {
-                    account.get_deposit(&Deposit::FT(ft.token_id.clone())) >= ft.amount_to_access.0
+                    account.get_balance(&AssetKey::FT(ft.token_id.clone())) >= ft.amount_to_access.0
                 }
                 Condition::NFTCondition(_) => todo!(),
                 Condition::DripCondition(drip) => {
-                    account.get_deposit(&Deposit::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0
+                    account.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0
                 },
             };
             match self.relationship {

@@ -687,9 +687,9 @@ dependencies = [
 
 [[package]]
 name = "near-non-transferable-token"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4598d38b4386e175ddb6d71fe4f9d5f5ee600e604b5ad49784e16146b54fa4f3"
+checksum = "035ad1a45a39f510a8a6622b6e1ba8f14e008b334cc6584b62a0bb32a6e864ed"
 dependencies = [
  "near-sdk",
  "serde",

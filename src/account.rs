@@ -3,6 +3,7 @@ use crate::{*, utils::get_access_limit};
 
 const REGISTERED: &str = "registered";
 const DRIP: &str = "drip";
+const TOTAL_DRIP: &str = "total_drip";
 const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
 const TOTAL_CONTENT_COUNT: &str = "total_content_count";
@@ -11,10 +12,10 @@ const TOTAL_CONTENT_COUNT: &str = "total_content_count";
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 #[derive(Debug, Clone)]
-pub enum Deposit {
+pub enum AssetKey {
     FT(AccountId),
     NFT(AccountId),
-    Drip((AccountId, AccountId))
+    Drip((Option<AccountId>, AccountId))
 }
 
 
@@ -55,9 +56,11 @@ impl Account {
         };
         this.data.insert(REGISTERED.to_string(), json!(false).to_string());
         this.data.insert(DRIP.to_string(), 0.to_string());
+        this.data.insert(TOTAL_DRIP.to_string(), 0.to_string());
         this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
         this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
         this.data.insert(TOTAL_CONTENT_COUNT.to_string(), 0.to_string());
+        
         this
     }
 
@@ -82,12 +85,17 @@ impl Account {
     }
 
     pub fn increase_drip(&mut self, amount: u128) {
-        let mut drip = self.get_drip();
+        let drip = self.get_drip();
         if let Some(new_drip) = drip.checked_add(amount) {
-            drip = new_drip
+            let drip: U128 = new_drip.into();
+            self.data.insert(DRIP.to_string(), json!(drip).to_string());
         }
-        let drip: U128 = drip.into();
-        self.data.insert(DRIP.to_string(), json!(drip).to_string());
+
+        let balance = AssetKey::Drip((None, env::current_account_id()));
+        let total_drip = self.get_balance(&balance);
+        if let Some(new_total_drip) = total_drip.checked_add(amount) {
+            self.set_balance(balance, new_total_drip);
+        }
     }
 
     pub fn decrease_drip(&mut self, amount: u128) {
@@ -95,7 +103,7 @@ impl Account {
         if let Some(new_drip) = drip.checked_sub(amount) {
             drip = new_drip;
         } else {
-            drip = 0;
+            panic!("not enough balance");
         }
         let drip: U128 = drip.into();
         self.data.insert(DRIP.to_string(), json!(drip).to_string());
@@ -125,29 +133,34 @@ impl Account {
 
 //////////////////////////////////////////////////////////  Deposit Part ////////////////////////////////////////////////////////////
 
-    pub fn get_deposit(&self, deposit: &Deposit) -> u128 {
-        let drip: U128 = serde_json::from_str(self.data.get(&json!(deposit).to_string()).unwrap_or(&"0".to_string())).unwrap_or(U128::from(0));
+    pub fn get_balance(&self, balance: &AssetKey) -> u128 {
+        let drip: U128 = serde_json::from_str(self.data.get(&json!(balance).to_string()).unwrap_or(&"0".to_string())).unwrap_or(U128::from(0));
         drip.0
     }
 
-    pub fn increase_deposit(&mut self, deposit: Deposit, amount: u128) {
-        let mut balance = self.get_deposit(&deposit);
+    pub fn increase_balance(&mut self, asset: AssetKey, amount: u128) {
+        let mut balance = self.get_balance(&asset);
         if let Some(new_balance) = balance.checked_add(amount) {
             balance = new_balance;
         }
         let balance: U128 = balance.into();
-        self.data.insert(json!(deposit).to_string(), json!(balance).to_string());
+        self.data.insert(json!(asset).to_string(), json!(balance).to_string());
     }
 
-    pub fn decrease_deposit(&mut self, deposit: Deposit, amount: u128) {
-        let mut balance = self.get_deposit(&deposit);
+    pub fn decrease_balance(&mut self, asset: AssetKey, amount: u128) {
+        let mut balance = self.get_balance(&asset);
         if let Some(new_balance) = balance.checked_sub(amount) {
             balance = new_balance;
         } else {
             panic!("not enough balance");
         }
         let balance: U128 = balance.into();
-        self.data.insert(json!(deposit).to_string(), json!(balance).to_string());
+        self.data.insert(json!(asset).to_string(), json!(balance).to_string());
+    }
+
+    pub fn set_balance(&mut self, asset: AssetKey, balance: u128) {
+        let balance: U128 = balance.into();
+        self.data.insert(json!(asset).to_string(), json!(balance).to_string());
     }
 ////////////////////////////////////////////////////////  Report Part ////////////////////////////////////////////////////////////////
 

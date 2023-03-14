@@ -22,7 +22,7 @@ use crate::utils::{get_arg, get_access_limit, verify};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
-use account::Deposit;
+use account::AssetKey;
 
 
 pub mod utils;
@@ -112,7 +112,7 @@ impl Community {
         };
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
-        account.increase_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
+        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
         this.accounts.insert(&owner_id, &account);
         this
     }
@@ -182,7 +182,7 @@ impl Community {
                 account
             }
         };
-        account.increase_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         self.accounts.insert(&sender_id, &account);
         set_storage_usage(initial_storage_usage, None);
         
@@ -208,7 +208,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         let mut account = self.accounts.get(&sender_id).unwrap();
-        account.increase_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         self.accounts.insert(&sender_id, &account);
         set_storage_usage(initial_storage_usage, None);
     }
@@ -216,7 +216,7 @@ impl Community {
     pub fn withdraw(&mut self, amount: U128) {
         let sender_id = env::predecessor_account_id();
         let mut account = self.accounts.get(&sender_id).unwrap_or_default();
-        account.decrease_deposit(Deposit::FT(AccountId::from_str("near").unwrap()), amount.0);
+        account.decrease_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), amount.0);
         self.accounts.insert(&sender_id, &account);
         Promise::new(sender_id).transfer(amount.0);
     }

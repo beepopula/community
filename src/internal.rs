@@ -22,22 +22,20 @@ impl Community {
         set_storage_usage(initial_storage_usage, Some(sender_id));
     }
 
-    pub(crate) fn internal_report_refund(&mut self, hierarchies: Vec<Hierarchy>) {
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("unknown");
+    pub(crate) fn internal_revoke_report(&mut self, sender_id: AccountId, hierarchies: Vec<Hierarchy>) {
+        let initial_storage_usage = env::storage_usage();
+        let sender_id = env::predecessor_account_id();
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        match self.reports.get(&hierarchy_hash) {
-            Some(accounts) => {
-                let mut drips = vec![];
-                for account_id in accounts {
-                    drips = [drips, self.drip.set_report_refund_drip(hierarchies.clone(), account_id)].concat();
+        if let Some(mut accounts) = self.reports.get(&hierarchy_hash) {
+            if let Some(_) = accounts.get(&sender_id) {
+                accounts.remove(&sender_id);
+                if accounts.is_empty() {
+                    self.reports.remove(&hierarchy_hash);
                 }
-                Event::log_refund(
-                    Some(json!({
-                        "drips": drips
-                    }).to_string())
-                );
-            },
-            None => {}
+            }
         }
+        
+        set_storage_usage(initial_storage_usage, None);
     }
 }

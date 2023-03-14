@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{*, access::Relationship, utils::get};
 use utils::get_content_hash;
 use post::Hierarchy;
-use account::Deposit;
+use account::AssetKey;
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -73,10 +73,10 @@ impl Community {
         roles
     }
 
-    pub fn get_deposit(&self, account_id: AccountId, deposit: Deposit) -> U128{
+    pub fn get_balance(&self, account_id: AccountId, balance: AssetKey) -> U128{
         match self.accounts.get(&account_id) {
             Some(account) => {
-                account.get_deposit(&deposit).into()
+                account.get_balance(&balance).into()
             },
             None => 0.into()
         }

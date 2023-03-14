@@ -221,20 +221,23 @@ pub(crate) fn get_access_limit() -> AccessLimit {
 
 
 pub(crate) fn set_storage_usage(initial_storage_usage: u64, account_id: Option<AccountId>) {
+    if let AccessLimit::Free = get_access_limit() {
+        return
+    }
     let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
     let account_id = match account_id {
         Some(account_id) => account_id,
         None => env::predecessor_account_id()
     };
     let mut account = accounts.get(&account_id).unwrap();
-    let deposit = Deposit::FT(AccountId::from_str("near").unwrap());
+    let balance = AssetKey::FT(AccountId::from_str("near").unwrap());
     let current_storage_usage = env::storage_usage();
     if current_storage_usage > initial_storage_usage {
         let storage_usage = current_storage_usage - initial_storage_usage;
-        account.decrease_deposit(deposit, storage_usage as u128 * env::storage_byte_cost());
+        account.decrease_balance(balance, storage_usage as u128 * env::storage_byte_cost());
     } else {
         let storage_usage = initial_storage_usage - current_storage_usage;
-        account.increase_deposit(deposit, storage_usage as u128 * env::storage_byte_cost())
+        account.increase_balance(balance, storage_usage as u128 * env::storage_byte_cost())
     }
     accounts.insert(&account_id, &account);
 }

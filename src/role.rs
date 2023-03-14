@@ -1,6 +1,6 @@
 use crate::*;
 use crate::access::{FTCondition, Condition, Relationship};
-use crate::account::Deposit;
+use crate::account::AssetKey;
 use crate::utils::{is_registered};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;

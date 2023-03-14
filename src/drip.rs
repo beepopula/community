@@ -28,7 +28,7 @@ pub fn get_map_value(key: &String) -> u128 {
         "invite":     "10000000000000000000000000",        //invite                      active for inviter
         "be_liked":    "200000000000000000000000",     //be_liked                   passive
         "report":     "2000000000000000000000000",      //report                     passive
-        "report_refund": "1000000000000000000000000",//report_refund             passive
+        "report_deposit": "1000000000000000000000000",//report_deposit            passive
     }).to_string()).unwrap();
     let val = *map.get(key).unwrap_or(&(U128::from(0)));
     val.0
@@ -138,16 +138,6 @@ impl Drip {
             return vec![]
         }
         let key = "report".to_string();
-        self.set_drip(key, None, &account_id, 100)
-    }
-
-    pub fn set_report_refund_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
-        let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
-        let content_account_id = hierarchy.account_id.clone();
-        if content_account_id == account_id {
-            return vec![]
-        }
-        let key = "report_refund".to_string();
         self.set_drip(key, None, &account_id, 100)
     }
 

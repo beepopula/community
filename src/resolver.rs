@@ -3,7 +3,7 @@ use near_non_transferable_token::fungible_token::receiver::FungibleTokenReceiver
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as FtReceiver;
 
 use crate::*;
-use crate::account::Deposit;
+use crate::account::AssetKey;
 use crate::drip::get_map_value;
 use crate::utils::get_parent_contract_id;
 use near_sdk::PromiseOrValue;
@@ -13,7 +13,9 @@ use near_sdk::PromiseOrValue;
 #[derive(Debug, Clone)]
 pub enum MsgInput {
     Report(ReportInput),
-    Deposit(Deposit)
+    RevokeReport(ReportInput),
+    Deposit(AssetKey),
+
 }
 
 #[derive(Serialize, Deserialize)]
@@ -30,13 +32,13 @@ impl FtReceiver for Community {
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
-            MsgInput::Deposit(deposit) => {
+            MsgInput::Deposit(balance) => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = accounts.get(&sender_id).unwrap_or_default();
-                match deposit {
-                    Deposit::FT(token_id) => {
+                match balance {
+                    AssetKey::FT(token_id) => {
                         assert!(token_id == env::predecessor_account_id(), "wrong drip");
-                        account.increase_deposit(Deposit::FT(token_id), amount.0);
+                        account.increase_balance(AssetKey::FT(token_id), amount.0);
                         accounts.insert(&sender_id, &account);
                         PromiseOrValue::Value(0.into())
                     }
@@ -55,51 +57,54 @@ impl NtftReceiver for Community {
 
     #[payable]
     fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
-        let msg_input = serde_json::from_str(&msg).unwrap();
+        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+        let mut account = accounts.get(&owner_id).unwrap_or_default();
+        account.increase_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+        accounts.insert(&owner_id, &account);
+        
+        let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
-            MsgInput::Deposit(deposit) => {
-                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-                let mut account = accounts.get(&owner_id).unwrap_or_default();
-                match deposit {
-                    Deposit::Drip((token_id, account_id)) => {
-                        assert!(token_id == env::predecessor_account_id() && account_id == contract_id, "wrong drip");
-                        account.increase_deposit(Deposit::FT(account_id), amount.0);
-                        accounts.insert(&owner_id, &account);
-                        PromiseOrValue::Value(0.into())
-                    },
-                    _ => {PromiseOrValue::Value(amount)}
-                }
+            MsgInput::Report(report_input) => {
+                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
+                assert!(contract_id == env::current_account_id(), "wrong drip");
+                let need_amount = get_map_value(&"report_deposit".to_string());
+                assert!(amount.0 >= need_amount, "not enough drip");
+                self.internal_report(owner_id, report_input.hierarchies);
+                PromiseOrValue::Value((amount.0 - need_amount).into())
             },
-            _ => {PromiseOrValue::Value(amount)}
+            _ => PromiseOrValue::Value(U128(0))
+        }
+    }
+
+    fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
+        let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+        let mut account = match accounts.get(&owner_id) {
+            Some(account) => account,
+            None => return PromiseOrValue::Value(U128(0))
+        };
+        account.decrease_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+        let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
+        match msg_input {
+            MsgInput::RevokeReport(report_input) => {
+                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
+                assert!(contract_id == env::current_account_id(), "wrong drip");
+                let need_amount = get_map_value(&"report_deposit".to_string());
+                assert!(amount.0 >= need_amount, "not enough drip");
+                self.internal_revoke_report(owner_id, report_input.hierarchies);
+                PromiseOrValue::Value((amount.0 - need_amount).into())
+            },
+            _ => PromiseOrValue::Value(U128(0))
         }
     }
 
 
     #[payable]
     fn ft_on_burn(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
-        let msg_input = serde_json::from_str(&msg).unwrap();
+        let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
-            MsgInput::Report(report_input) => {
-                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
-                assert!(contract_id == env::current_account_id(), "wrong drip");
-                let need_amount = get_map_value(&"report_refund".to_string());
-                assert!(amount.0 >= need_amount, "not enough drip");
-                self.internal_report(owner_id, report_input.hierarchies);
-                PromiseOrValue::Value((amount.0 - need_amount).into())
-            },
-            _ => {PromiseOrValue::Value(amount)}
+            _ => {PromiseOrValue::Value(U128(0))}
         }
         
-    }
-
-    fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, amount: U128) -> PromiseOrValue<U128>  {
-        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-        let mut account = match accounts.get(&owner_id) {
-            Some(account) => account,
-            None => return PromiseOrValue::Value(amount)
-        };
-        account.decrease_deposit(Deposit::Drip((env::predecessor_account_id(), contract_id)), amount.0);
-        PromiseOrValue::Value(0.into())
     }
 
 }

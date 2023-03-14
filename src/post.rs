@@ -2,7 +2,7 @@ use std::{convert::TryInto, str::FromStr};
 
 use near_sdk::CryptoHash;
 
-use crate::{*, utils::{get, check_and_set, check}};    
+use crate::{*, utils::{get, check_and_set, check}, drip::get_map_value};    
 use utils::{get_content_hash, set_content};
 
 // #[derive(Serialize, Deserialize)]
@@ -162,13 +162,7 @@ impl Community {
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id) || sender_id == self.owner_id, "not allowed");
 
-        let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, false) {
-            Some(v) => v,
-            None => {
-                self.internal_report_refund(hierarchies);
-                return
-            }
-        };
+        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let accounts = self.reports.get(&hierarchy_hash).unwrap_or(HashSet::new());
         self.reports.remove(&hierarchy_hash);
@@ -192,33 +186,20 @@ impl Community {
                 //self.drip.set_report_confirm_drip(sender_id);
             },
             Report::Disapprove => {
-
+                for account_id in &accounts {
+                    let mut account = match self.accounts.get(account_id) {
+                        Some(account) => account,
+                        None => continue
+                    };
+                    account.decrease_balance(AssetKey::Drip((get_arg::<AccountId>(DRIP_CONTRACT), env::current_account_id())), get_map_value(&"report_deposit".to_string()))
+                }
             },
             Report::Ignore => {
-                self.internal_report_refund(hierarchies);
-            }
-        }
-        
-        
-    }
 
-    pub fn revoke_report(&mut self, hierarchies: Vec<Hierarchy>) {
-        let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
-        let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("content not found");
-        let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
-        if let Some(accounts) = self.reports.get(&hierarchy_hash) {
-            if let Some(_) = accounts.get(&sender_id) {
-                let drips = self.drip.set_report_refund_drip(hierarchies.clone(), sender_id);
-                Event::log_refund(
-                    Some(json!({
-                        "drips": drips
-                    }).to_string())
-                );
             }
         }
-        self.reports.remove(&hierarchy_hash);
-        set_storage_usage(initial_storage_usage, None);
+        
+        
     }
 
     pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
