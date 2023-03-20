@@ -57,11 +57,6 @@ impl NtftReceiver for Community {
 
     #[payable]
     fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
-        let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-        let mut account = accounts.get(&owner_id).unwrap_or_default();
-        account.increase_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
-        accounts.insert(&owner_id, &account);
-        
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Report(report_input) => {
@@ -72,7 +67,15 @@ impl NtftReceiver for Community {
                 self.internal_report(owner_id, report_input.hierarchies);
                 PromiseOrValue::Value((amount.0 - need_amount).into())
             },
-            _ => PromiseOrValue::Value(U128(0))
+            _ => {
+                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+                let mut account = accounts.get(&owner_id).unwrap_or_default();
+                account.increase_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+                accounts.insert(&owner_id, &account);
+                PromiseOrValue::Value(0.into())
+            }
+            
+            
         }
     }
 
@@ -80,20 +83,23 @@ impl NtftReceiver for Community {
         let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
         let mut account = match accounts.get(&owner_id) {
             Some(account) => account,
-            None => return PromiseOrValue::Value(U128(0))
+            None => return PromiseOrValue::Value(amount)
         };
-        account.decrease_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::RevokeReport(report_input) => {
                 assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_deposit".to_string());
-                assert!(amount.0 >= need_amount, "not enough drip");
+                assert!(amount.0 > need_amount, "not enough amount");
                 self.internal_revoke_report(owner_id, report_input.hierarchies);
                 PromiseOrValue::Value((amount.0 - need_amount).into())
             },
-            _ => PromiseOrValue::Value(U128(0))
+            _ => {
+                account.decrease_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+                PromiseOrValue::Value(0.into())
+            }
         }
     }
 
@@ -102,7 +108,7 @@ impl NtftReceiver for Community {
     fn ft_on_burn(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
-            _ => {PromiseOrValue::Value(U128(0))}
+            _ => {PromiseOrValue::Value(amount)}
         }
         
     }

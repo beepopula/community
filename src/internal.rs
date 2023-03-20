@@ -24,7 +24,6 @@ impl Community {
 
     pub(crate) fn internal_revoke_report(&mut self, sender_id: AccountId, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, true).expect("content not found");
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         if let Some(mut accounts) = self.reports.get(&hierarchy_hash) {

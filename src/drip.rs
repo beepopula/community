@@ -27,7 +27,7 @@ pub fn get_map_value(key: &String) -> u128 {
         "like":        "200000000000000000000000",         //like                       active
         "invite":     "10000000000000000000000000",        //invite                      active for inviter
         "be_liked":    "200000000000000000000000",     //be_liked                   passive
-        "report":     "2000000000000000000000000",      //report                     passive
+        "report":     "1000000000000000000000000",      //report                     passive
         "report_deposit": "1000000000000000000000000",//report_deposit            passive
     }).to_string()).unwrap();
     let val = *map.get(key).unwrap_or(&(U128::from(0)));

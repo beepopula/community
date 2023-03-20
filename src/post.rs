@@ -182,23 +182,23 @@ impl Community {
                         "drips": drips
                     }).to_string())
                 );
-                set_storage_usage(initial_storage_usage, Some(accounts.iter().next().unwrap().clone()));
-                //self.drip.set_report_confirm_drip(sender_id);
             },
-            Report::Disapprove => {
+            _ => {}
+        }
+
+        match report {
+            Report::Disapprove => {},
+            _ => {
                 for account_id in &accounts {
                     let mut account = match self.accounts.get(account_id) {
                         Some(account) => account,
                         None => continue
                     };
-                    account.decrease_balance(AssetKey::Drip((get_arg::<AccountId>(DRIP_CONTRACT), env::current_account_id())), get_map_value(&"report_deposit".to_string()))
+                    account.increase_balance(AssetKey::Drip((get_arg::<AccountId>(DRIP_CONTRACT), env::current_account_id())), get_map_value(&"report_deposit".to_string()))
                 }
-            },
-            Report::Ignore => {
-
             }
         }
-        
+        set_storage_usage(initial_storage_usage, None);
         
     }
 
