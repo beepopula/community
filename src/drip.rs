@@ -52,7 +52,7 @@ impl Drip {
     fn set_drip(&mut self, key: String, options: Option<HashMap<String, String>>, account_id: &AccountId, per: u32) -> Vec<(AccountId, String, U128)> {
         let total_drip = U256::from(get_map_value(&key));
         let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
-        let mut drip = total_drip.clone();
+        let mut drip = total_drip.clone() * U256::from(100 as u128);
 
         if let Some(options) = options.clone() {
             if let Some(royalties) = options.get("drip_royalties") {
@@ -70,7 +70,6 @@ impl Drip {
         }
         
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        drip *= per;
         let drip = (drip / U256::from(100 as u128)).as_u128();
         account.increase_drip(drip);
         self.accounts.insert(&account_id, &account);
@@ -175,5 +174,42 @@ impl Drip {
 
     pub fn get_content_decay(&self, content_count: u32) -> u32 {
         get_content_decay(content_count as u8)
+    }
+}
+
+
+
+mod test {
+    use std::collections::HashMap;
+
+    use near_sdk::{json_types::U128, AccountId, serde_json::json, serde_json};
+
+    use super::{U256, get_map_value};
+
+
+    #[test]
+    pub fn test() {
+        let mut options: HashMap<String, String> = HashMap::new();
+        let r = json!({
+            "billkin.testnet": 5
+        }).to_string();
+        options.insert("drip_royalties".to_string(), r);
+        let total_drip: U256 = U256::from(get_map_value(&"like".to_string()));
+        let mut drip = total_drip.clone() * U256::from(100 as u128);
+
+
+        if let Some(royalties) = options.get("drip_royalties") {
+            let royalties: HashMap<AccountId, u32> = serde_json::from_str(&royalties).unwrap_or(HashMap::new());
+            for (account_id, royalty) in royalties {
+                let account_royalty = total_drip * royalty;
+                println!("account_royalty: {:?}, drip: {:?}", account_royalty, drip);
+                drip -= account_royalty;
+                let account_royalty = (account_royalty / U256::from(100 as u128)).as_u128();
+                println!("{:?}", account_royalty)
+            }
+        }
+        
+        let drip = (drip / U256::from(100 as u128)).as_u128();
+        println!("{:?}", drip);
     }
 }
