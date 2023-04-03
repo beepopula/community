@@ -242,6 +242,13 @@ pub(crate) fn set_storage_usage(initial_storage_usage: u64, account_id: Option<A
     accounts.insert(&account_id, &account);
 }
 
+pub(crate) fn fromRpcSig(buf: &[u8]) -> (Vec<u8>, u8) {
+    let mut sign = buf[0..64].to_vec();
+    let v = u8::try_from_slice(&buf[32..33]).unwrap() >> 7;
+    sign[32] &= 0x7f;
+    return (sign, v)
+}
+
 
 #[cfg(test)]
 mod tests {

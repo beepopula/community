@@ -11,14 +11,15 @@ use near_fixed_bit_tree::BitTree;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
-use near_sdk::serde_json::{json, self};
+use near_sdk::serde_json::{json, self, to_string};
 use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
 use role::{RoleManagement};
+use uint::hex;
 use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage};
 use crate::post::Hierarchy;
-use crate::utils::{get_arg, get_access_limit, verify};
+use crate::utils::{get_arg, get_access_limit, verify, fromRpcSig};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -58,8 +59,6 @@ pub struct OldCommunity {
     owner_id: AccountId,
     args: HashMap<String, String>,
     accounts: LookupMap<AccountId, Account>,
-    content_tree: BitTree,
-    relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
     role_management: RoleManagement,
@@ -117,23 +116,23 @@ impl Community {
         this
     }
 
-    #[init(ignore_state)]
-    pub fn migrate() -> Self {
-        let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
-        assert!(env::predecessor_account_id() == prev.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
+    // #[init(ignore_state)]
+    // pub fn migrate() -> Self {
+    //     let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
+    //     assert!(env::predecessor_account_id() == prev.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
         
-        let this = Community {
-            owner_id: prev.owner_id,
-            args: prev.args,
-            accounts: prev.accounts,
-            reports: prev.reports,
-            drip: prev.drip,
-            role_management: prev.role_management,
-            access: prev.access
-        };
-        env::state_write::<Community>(&this);
-        this
-    }
+    //     let this = Community {
+    //         owner_id: prev.owner_id,
+    //         args: prev.args,
+    //         accounts: prev.accounts,
+    //         reports: prev.reports,
+    //         drip: prev.drip,
+    //         role_management: prev.role_management,
+    //         access: prev.access
+    //     };
+    //     env::state_write::<Community>(&this);
+    //     this
+    // }
 
     pub fn follow(&mut self, account_id: AccountId) {
         let sender_id = env::predecessor_account_id();
@@ -230,17 +229,37 @@ impl Community {
     }
 
     #[payable]
-    pub fn collect_drip_from_non_near_account(&mut self, account_id: AccountId, sign: String, timestamp: U64) -> U128 {
+    #[cfg(feature = "unstable")]
+    pub fn gather_drip_from_non_near_account(&mut self, id: String, public_key: String, sign: String, timestamp: U64) {
         assert_one_yocto();
-        assert!(self.accounts.get(&account_id).is_some(), "account not found");
+
         let timestamp = u64::from(timestamp);
         assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
         let sender_id = env::signer_account_id();
-        let message = (account_id.to_string() + &sender_id.to_string() + &timestamp.to_string()).as_bytes().to_vec();
-        let sign = bs58::decode(sign).into_vec().unwrap();
-        let pk = account_id.as_bytes().to_vec();
-        assert!(verify(message, sign, pk), "not verified");
-        self.drip.get_and_clear_drip(account_id)
+        let message = (sender_id.to_string() + &timestamp.to_string()).as_bytes().to_vec();
+        let non_near_account_id = match id.as_str() {
+            "eth" => {
+                let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
+                let hash = env::keccak256(&[prefix, message].concat());
+                let sign = hex::decode(sign).unwrap();
+                let (sign, v) = fromRpcSig(&sign);
+                let public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
+                let account_id = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
+                AccountId::from_str(&account_id).unwrap()
+            },
+            _ => {
+                let sign = bs58::decode(sign).into_vec().unwrap();
+                let pk = public_key.as_bytes().to_vec();
+                assert!(verify(message, sign, pk), "not verified");
+                AccountId::from_str(&public_key).unwrap()
+            }
+        };
+        let mut non_near_account = self.accounts.get(&non_near_account_id).expect("account not found");
+        let mut account = self.accounts.get(&sender_id).unwrap();
+        let amount = non_near_account.get_drip();
+        non_near_account.decrease_drip(amount);
+        self.accounts.insert(&non_near_account_id, &non_near_account);
+        account.increase_drip(amount)
     }
 }
 
@@ -250,6 +269,52 @@ impl Community {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::HashMap, str::FromStr};
 
+    use near_sdk::{base64, serde_json, borsh::{BorshDeserialize, BorshSerialize}, AccountId, env, json_types::U64};
+    use uint::hex;
+    use crate::{Community, OldCommunity, utils::fromRpcSig};
+
+
+    #[test]
+    pub fn test() {
+        // let state = base64::decode("DAAAAGZpbG8udGVzdG5ldAIAAAANAAAAZHJpcF9jb250cmFjdBYAAABkcmlwLmJlZXBvcHVsYS50ZXN0bmV0CgAAAHB1YmxpY19rZXksAAAARllMVjV6dFNlMkZqblJUQ0JIZ0UxSFVvQWlvSHVRQmF2Y0VLU2g3b0RxOWQBAAAAAQIAAAAAaQIAAAAAAAAAAgAAAABrAgAAAAAAAAACAAAAAHYBAAAAAQQAAAAsAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb20IAAAAQ3VyYXRvcnMzAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb21fbWVtYmVyBAAAAAQFBgcAAAAAAAAAACwAAABCazhGWUhXcWJ2aEdERndGdGNDWFduVDRMcGFwY3l3TjFLZXQ0aWdvSlJIZgYAAABBZG1pbnMzAAAAQms4RllIV3FidmhHREZ3RnRjQ1hXblQ0THBhcGN5d04xS2V0NGlnb0pSSGZfbWVtYmVyCgAAAAQFBgcICQwBAwAAAGJhbg0BAwAAAGJhbg4BCQAAAE1hbmFnZVBpbg4BCwAAAE1hbmFnZVJ1bGVzAQAAAAAAAAAsAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2EdAAAATkZUIFBhcmlzIE1hcmtldGluZyBDb21taXR0ZWUzAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2FfbWVtYmVyBAAAAAQFBgcAAAAAAAAAAAMAAABiYW4GAAAAQmFubmVkCgAAAGJhbl9tZW1iZXIAAAAAAAAAAGMAAAATAAAAAAAAAQEAAAACFgAAAGRyaXAuYmVlcG9wdWxhLnRlc3RuZXQrAAAAcmVuZ2F1bm9mZmljaWFsLmNvbW11bml0eS5iZWVwb3B1bGEudGVzdG5ldAAAAKHtzM4bwtMAAAAAAAAAAAEAAAACAAABAAACAAABAQAAAAIWAAAAZHJpcC5iZWVwb3B1bGEudGVzdG5ldCsAAAByZW5nYXVub2ZmaWNpYWwuY29tbXVuaXR5LmJlZXBvcHVsYS50ZXN0bmV0AAAAoe3MzhvC0wAAAAAAAAACAQAAAgIAAAMAAAQAAAUAAAYAAAcAAAgBAAkBAAoAAQALAAEADAABAA0AAQAOAAEAAQ==").unwrap();
+        // let state = OldCommunity::try_from_slice(&state).unwrap();
+        // let mut map = HashMap::new();
+        // map.insert("drip_contract".to_string(), "v2-drip.beepopula.testnet".to_string());
+        // let community = Community::new(AccountId::from_str("filo.testnet").unwrap(), map);
+        // let text = community.try_to_vec().unwrap();
+        // let text = base64::encode(text);
+        // println!("{:?}", text);
+    }
+
+    #[test]
+    pub fn test_address() {
+        let public_key = "59b42ef8f3b1deb16ddb61f82a1e536a02cb887c38024bb57dbe3852a88c691a6effd3571a2afb98d68ceae968e0bf21da5e1cdb510f807982f8a3d5b7e8175f";
+        let address = hex::encode(env::keccak256(&hex::decode(public_key).unwrap())[12..].to_vec());
+        println!("{:?}, {:?}", address, address.len())
+    }
+
+    // #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(feature = "unstable")]
+    #[test]
+    pub fn test_ecrecover() {
+        use near_sdk::test_utils::test_env;
+
+        test_env::setup_free();
+        let sign = "f0adef56c1292c6922e6ab36baf19ba8998aafe7abaeabb6452c2da83afc9fa07d58172e0d38b17b41d3d3f37b0b9ec23800519f1576912d5549bb2fb77dc4c5".to_string();
+        let message = ("123").as_bytes().to_vec();
+        let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
+        let hash = env::keccak256(&[prefix, message].concat());
+        let sign = hex::decode(sign).unwrap();
+        
+        let (_, v) = fromRpcSig(&sign);
+        println!("{:?}, {}", sign, v);
+        let public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
+        println!("{:?}", public_key);
+        let account_id = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
+        println!("{:?}", account_id)
+        // AccountId::from_str(&().unwrap();
+    }
 
 }

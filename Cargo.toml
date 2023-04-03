@@ -8,7 +8,7 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "4.1.0-pre.3"
+near-sdk = { version = "4.1.0-pre.3", features = [] }
 near-contract-standards = "4.1.0-pre.3"
 uint = { version = "0.9.3", default-features = false }
 near-fixed-bit-tree = "0.0.0"
