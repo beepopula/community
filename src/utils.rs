@@ -242,12 +242,28 @@ pub(crate) fn set_storage_usage(initial_storage_usage: u64, account_id: Option<A
     accounts.insert(&account_id, &account);
 }
 
-pub(crate) fn fromRpcSig(buf: &[u8]) -> (Vec<u8>, u8) {
+pub(crate) fn from_rpc_sig(buf: &[u8]) -> (Vec<u8>, u8) {
     let mut sign = buf[0..64].to_vec();
     let v = u8::try_from_slice(&buf[32..33]).unwrap() >> 7;
     sign[32] &= 0x7f;
     return (sign, v)
 }
+
+// pub(crate) fn to_checksum_address(address: String) -> String {
+//     let address = address.trim_start_matches("0x").to_lowercase();
+//     let hash = env::keccak256(address.as_bytes());
+//     let hash_hex = hex::encode(hash);
+//     let mut checksum_address = "0x".to_string();
+//     for (idx, addr_char) in address.chars().enumerate() {
+//         let c = if hash_hex.chars().nth(idx).unwrap().to_digit(16).unwrap() >= 8 {
+//             addr_char.to_ascii_uppercase()
+//         } else {
+//             addr_char
+//         };
+//         checksum_address.push(c);
+//     }
+//     checksum_address
+// }
 
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use crate::{*, access::Relationship, utils::get};
+use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Vote, Proposal}};
+use near_sdk::Balance;
 use utils::get_content_hash;
 use post::Hierarchy;
 use account::AssetKey;
@@ -13,6 +14,23 @@ pub struct RoleOutput {
     pub permissions: HashSet<Permission>,
     pub mod_level: u32,
     pub override_level: u32  
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug)]
+pub struct ProposalOutput {
+    pub method: String,
+    pub proposer: AccountId,
+    pub asset: Option<AssetKey>,
+    pub description: String,
+    pub action_kind: String,
+    pub args: String,
+    pub vote_counts: HashMap<Vote, Balance>,
+    pub until: U64,
+    pub quorum: U128,
+    pub threshold: u32,
+    pub status: ProposalStatus
 }
 
 
@@ -90,11 +108,24 @@ impl Community {
     //     account.values().collect()
     // }
 
-    #[cfg(feature = "unstable")]
-    pub fn get_decode_content(&self, hash: Vec<u8>, sign: Vec<u8>) {
-        let ret = env::ecrecover(&hash, &sign, 32, false);
+    pub fn get_proposal(&self, id: String) -> ProposalOutput {
+        let proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
+        let proposal: Proposal = proposals.get(&id).unwrap().into();
+        let status = proposal.get_status();
+        ProposalOutput {
+            method: proposal.method,
+            proposer: proposal.proposer,
+            asset: proposal.asset,
+            description: proposal.description,
+            action_kind: proposal.action_kind,
+            args: proposal.args,
+            vote_counts: proposal.vote_counts,
+            until: proposal.until,
+            quorum: proposal.quorum,
+            threshold: proposal.threshold,
+            status: status
+        }
     }
-    
 }
 
 

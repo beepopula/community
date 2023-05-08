@@ -94,7 +94,7 @@ impl Account {
         let balance = AssetKey::Drip((None, env::current_account_id()));
         let total_drip = self.get_balance(&balance);
         if let Some(new_total_drip) = total_drip.checked_add(amount) {
-            self.set_balance(balance, new_total_drip);
+            self.increase_balance(balance, amount);
         }
     }
 
@@ -148,17 +148,17 @@ impl Account {
     }
 
     pub fn decrease_balance(&mut self, asset: AssetKey, amount: u128) {
+        if let AssetKey::Drip((token_id, _)) = asset.clone() {
+            if token_id == None {
+                return
+            }
+        }
         let mut balance = self.get_balance(&asset);
         if let Some(new_balance) = balance.checked_sub(amount) {
             balance = new_balance;
         } else {
             panic!("not enough balance");
         }
-        let balance: U128 = balance.into();
-        self.data.insert(json!(asset).to_string(), json!(balance).to_string());
-    }
-
-    pub fn set_balance(&mut self, asset: AssetKey, balance: u128) {
         let balance: U128 = balance.into();
         self.data.insert(json!(asset).to_string(), json!(balance).to_string());
     }

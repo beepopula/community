@@ -16,7 +16,16 @@ pub enum Event {
     //custome events
     Invite(Vec<InviteData>),
     Refund(Vec<RefundData>),
-    SetMetadata(Vec<Metadata>)
+    SetMetadata(Vec<Metadata>),
+    Gather(Vec<Gather>)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Gather {
+    pub from: AccountId,
+    pub to: AccountId,
+    pub memo: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -156,5 +165,15 @@ impl Event {
 
     pub fn log_set_metadata(metadata: Vec<Metadata>) {
         Event::SetMetadata(metadata).log()
+    }
+
+    pub fn log_gather(from: AccountId, to: AccountId, memo: Option<String>) {
+        Event::Gather(vec![
+            Gather {
+                from,
+                to,
+                memo
+            }
+        ]).log()
     }
 }

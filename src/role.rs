@@ -54,7 +54,10 @@ pub enum Permission {
     DelRole(Option<String>),
     AddMember(Option<String>),
     RemoveMember(Option<String>),
-    Other(Option<String>)   //off-chain permission
+    Other(Option<String>),   //off-chain permission
+
+    AddProposal(Option<String>),  //account Id, method
+    Vote(Option<String>),
 }
 
 
@@ -79,6 +82,7 @@ impl RoleManagement {
         permissions.insert(Permission::Like, (Relationship::Or, None));
         permissions.insert(Permission::Unlike, (Relationship::Or, None));
         permissions.insert(Permission::Report, (Relationship::Or, None));
+        permissions.insert(Permission::AddProposal(None), (Relationship::Or, None));
         permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
         permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
         permissions.insert(Permission::SetRole(None), (Relationship::And, None));
@@ -97,6 +101,15 @@ impl RoleManagement {
             mod_level: 0,
             override_level: 99
         });
+        this.roles.insert("mod".to_string(), Role { 
+            alias: "Mod".to_string(),
+            members: "mod_member".to_string().into_bytes(), 
+            permissions:  HashSet::new(),
+            mod_level: 2,
+            override_level: 0
+        });
+        let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new("mod_member".to_string().into_bytes());
+        role_members.insert(&env::current_account_id(), &HashMap::new());
         this
     }
 }
@@ -107,6 +120,8 @@ impl Community {
 
     pub fn set_global_role(&mut self, permissions: Vec<Permission>, options: Vec<(Relationship, Option<Access>)>) {
         let initial_storage_usage = env::storage_usage();
+        let sender_id = env::predecessor_account_id();
+        assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(None)), "not allowed");
         for i in 0..permissions.len() {
             self.role_management.global_role.insert(permissions[i].clone(), options[i].clone());
         }
@@ -141,9 +156,10 @@ impl Community {
     }
 
 
-    pub fn set_role(&mut self, hash: String, alias: Option<String>, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
+    pub fn set_role(&mut self, hash: Base58CryptoHash, alias: Option<String>, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
+        let hash = String::from(&hash);
         assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(Some(hash.clone()))), "not allowed");
         let mut role = match self.role_management.roles.get(&hash) {
             Some(v) => v.clone(),
@@ -360,57 +376,57 @@ impl Community {
             return Some(true)
         }
         let permissions = self.role_management.global_role.clone();
-        let relationship = match permission {
-            Permission::SetRole(hash) => {
-                match permissions.get(&permission) {
-                    Some(val) => val,
-                    None => match permissions.get(&Permission::SetRole(None)) {
-                        Some(val) => val,
-                        None => return Some(false)
-                    }
+        let relationship = match permissions.get(&permission) {
+            Some(val) => val,
+            None => {
+                match permission {
+                    Permission::SetRole(hash) => { 
+                        match permissions.get(&Permission::SetRole(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    Permission::DelRole(hash) => {
+                        match permissions.get(&Permission::DelRole(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    Permission::AddMember(hash) => {
+                        match permissions.get(&Permission::AddMember(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    Permission::RemoveMember(hash) => {
+                        match permissions.get(&Permission::RemoveMember(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    Permission::Other(_) => {
+                        match permissions.get(&Permission::Other(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    Permission::AddProposal(_) => {
+                        match permissions.get(&Permission::AddProposal(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    Permission::Vote(_) => {
+                        match permissions.get(&Permission::Vote(None)) {
+                            Some(val) => val,
+                            None => return Some(false)
+                        }
+                    },
+                    _ => return Some(false)
                 }
-            },
-            Permission::DelRole(hash) => {
-                match permissions.get(&permission) {
-                    Some(val) => val,
-                    None => match permissions.get(&Permission::DelRole(None)) {
-                        Some(val) => val,
-                        None => return Some(false)
-                    }
-                }
-            },
-            Permission::AddMember(hash) => {
-                match permissions.get(&permission) {
-                    Some(val) => val,
-                    None => match permissions.get(&Permission::AddMember(None)) {
-                        Some(val) => val,
-                        None => return Some(false)
-                    }
-                }
-            },
-            Permission::RemoveMember(hash) => {
-                match permissions.get(&permission) {
-                    Some(val) => val,
-                    None => match permissions.get(&Permission::RemoveMember(None)) {
-                        Some(val) => val,
-                        None => return Some(false)
-                    }
-                }
-            },
-            Permission::Other(hash) => {
-                match permissions.get(&permission) {
-                    Some(val) => val,
-                    None => match permissions.get(&Permission::Other(None)) {
-                        Some(val) => val,
-                        None => return Some(false)
-                    }
-                }
-            },
-            _ => match permissions.get(&permission) {
-                Some(val) => val,
-                None => return Some(false)
             }
         };
+        
         match relationship.0 {
             Relationship::Or => {
                 if let Some(access) = &relationship.1 {
@@ -469,6 +485,8 @@ impl Community {
                 }
             },
             Permission::Other(_) => permissions.contains(&permission) || permissions.contains(&Permission::Other(None)),
+            Permission::AddProposal(_) => permissions.contains(&permission) || permissions.contains(&Permission::AddProposal(None)),
+            Permission::Vote(_) => permissions.contains(&permission) || permissions.contains(&Permission::Vote(None)),
             _ => permissions.contains(&permission)
         }
     }
@@ -558,34 +576,19 @@ mod tests {
     }
 
     fn check_allowed(permission: &Permission, permissions: &HashSet<Permission>) -> bool {
+
         match permission {
             Permission::SetRole(hash) => {
-                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::SetRole(None));
-                allowed && match hash {
-                    Some(hash) => true,
-                    None => true,
-                }
+                permissions.contains(&permission) || permissions.contains(&Permission::SetRole(None))
             },
             Permission::DelRole(hash) => {
-                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::DelRole(None));
-                allowed && match hash {
-                    Some(hash) => true,
-                    None => true,
-                }
+                permissions.contains(&permission) || permissions.contains(&Permission::DelRole(None))
             },
             Permission::AddMember(hash) => {
-                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::AddMember(None));
-                allowed && match hash {
-                    Some(hash) => true,
-                    None => true,
-                }
+                permissions.contains(&permission) || permissions.contains(&Permission::AddMember(None))
             },
             Permission::RemoveMember(hash) => {
-                let allowed = permissions.contains(&permission) || permissions.contains(&Permission::RemoveMember(None));
-                allowed && match hash {
-                    Some(hash) => true,
-                    None => true,
-                }
+                permissions.contains(&permission) || permissions.contains(&Permission::RemoveMember(None))
             },
             Permission::Other(_) => permissions.contains(&permission) || permissions.contains(&Permission::Other(None)),
             _ => permissions.contains(&permission)

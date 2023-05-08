@@ -153,6 +153,21 @@ impl Drip {
         self.set_drip(key, None, &inviter_id, 100)
     }
 
+    pub fn gather_drip(&mut self, from: AccountId, to: AccountId) -> Vec<(AccountId, String, U128)> {
+        if from == to {
+            return vec![]
+        }
+
+        let mut from_account = self.accounts.get(&from).unwrap_or_default();
+        let mut to_account = self.accounts.get(&to).unwrap();
+        let amount = from_account.get_drip();
+        from_account.decrease_drip(amount);
+        self.accounts.insert(&from, &from_account);
+        to_account.increase_drip(amount);
+        self.accounts.insert(&to, &to_account);
+        vec![(to, "gather".to_string(), amount.into())]
+    }
+
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> U128 {
         let mut account = self.accounts.get(&account_id).unwrap_or_default();
         assert!(account.is_registered(), "not registered");

@@ -1,5 +1,4 @@
 
-
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::str::FromStr;
@@ -12,14 +11,15 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self, to_string};
-use near_sdk::{env, near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey};
+use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
 use role::{RoleManagement};
 use uint::hex;
 use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage};
+use crate::events::Gather;
 use crate::post::Hierarchy;
-use crate::utils::{get_arg, get_access_limit, verify, fromRpcSig};
+use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -38,6 +38,7 @@ pub mod account;
 pub mod resolver;
 pub mod internal;
 pub mod metadata;
+pub mod proposal;
 
 
 const JOIN_DEPOSIT: u128 = 50000000000000000000000;
@@ -72,7 +73,8 @@ const MAX_LEVEL: usize = 3;
 pub enum StorageKey {
     Report,
     Account,
-    Roles
+    Roles,
+    Proposals
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -112,6 +114,9 @@ impl Community {
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
+        let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
+        account.set_registered(true);
+        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), u128::MAX);
         this.accounts.insert(&owner_id, &account);
         this
     }
@@ -229,10 +234,9 @@ impl Community {
     }
 
     #[payable]
-    #[cfg(feature = "unstable")]
+    // #[cfg(feature = "unstable")]
     pub fn gather_drip_from_non_near_account(&mut self, id: String, public_key: String, sign: String, timestamp: U64) {
         assert_one_yocto();
-
         let timestamp = u64::from(timestamp);
         assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
         let sender_id = env::signer_account_id();
@@ -242,29 +246,30 @@ impl Community {
                 let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
                 let hash = env::keccak256(&[prefix, message].concat());
                 let sign = hex::decode(sign).unwrap();
-                let (sign, v) = fromRpcSig(&sign);
+                let (sign, v) = from_rpc_sig(&sign);
+                
                 let public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
-                let account_id = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
-                AccountId::from_str(&account_id).unwrap()
+                let address = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
+                AccountId::from_str(&address).unwrap()
             },
             _ => {
                 let sign = bs58::decode(sign).into_vec().unwrap();
-                let pk = public_key.as_bytes().to_vec();
+                let pk = hex::decode(public_key.clone()).unwrap();
                 assert!(verify(message, sign, pk), "not verified");
                 AccountId::from_str(&public_key).unwrap()
             }
         };
-        let mut non_near_account = self.accounts.get(&non_near_account_id).expect("account not found");
-        let mut account = self.accounts.get(&sender_id).unwrap();
-        let amount = non_near_account.get_drip();
-        non_near_account.decrease_drip(amount);
-        self.accounts.insert(&non_near_account_id, &non_near_account);
-        account.increase_drip(amount)
+        let drips = self.drip.gather_drip(non_near_account_id.clone(), sender_id.clone());
+
+        Event::log_gather(
+            non_near_account_id,
+            sender_id,
+            Some(json!({
+                "drips": drips
+            }).to_string())
+        );
     }
 }
-
-
-
 
 
 #[cfg(test)]
@@ -273,19 +278,19 @@ mod tests {
 
     use near_sdk::{base64, serde_json, borsh::{BorshDeserialize, BorshSerialize}, AccountId, env, json_types::U64};
     use uint::hex;
-    use crate::{Community, OldCommunity, utils::fromRpcSig};
+    use crate::{Community, OldCommunity, utils::{from_rpc_sig}};
 
 
     #[test]
     pub fn test() {
-        // let state = base64::decode("DAAAAGZpbG8udGVzdG5ldAIAAAANAAAAZHJpcF9jb250cmFjdBYAAABkcmlwLmJlZXBvcHVsYS50ZXN0bmV0CgAAAHB1YmxpY19rZXksAAAARllMVjV6dFNlMkZqblJUQ0JIZ0UxSFVvQWlvSHVRQmF2Y0VLU2g3b0RxOWQBAAAAAQIAAAAAaQIAAAAAAAAAAgAAAABrAgAAAAAAAAACAAAAAHYBAAAAAQQAAAAsAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb20IAAAAQ3VyYXRvcnMzAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb21fbWVtYmVyBAAAAAQFBgcAAAAAAAAAACwAAABCazhGWUhXcWJ2aEdERndGdGNDWFduVDRMcGFwY3l3TjFLZXQ0aWdvSlJIZgYAAABBZG1pbnMzAAAAQms4RllIV3FidmhHREZ3RnRjQ1hXblQ0THBhcGN5d04xS2V0NGlnb0pSSGZfbWVtYmVyCgAAAAQFBgcICQwBAwAAAGJhbg0BAwAAAGJhbg4BCQAAAE1hbmFnZVBpbg4BCwAAAE1hbmFnZVJ1bGVzAQAAAAAAAAAsAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2EdAAAATkZUIFBhcmlzIE1hcmtldGluZyBDb21taXR0ZWUzAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2FfbWVtYmVyBAAAAAQFBgcAAAAAAAAAAAMAAABiYW4GAAAAQmFubmVkCgAAAGJhbl9tZW1iZXIAAAAAAAAAAGMAAAATAAAAAAAAAQEAAAACFgAAAGRyaXAuYmVlcG9wdWxhLnRlc3RuZXQrAAAAcmVuZ2F1bm9mZmljaWFsLmNvbW11bml0eS5iZWVwb3B1bGEudGVzdG5ldAAAAKHtzM4bwtMAAAAAAAAAAAEAAAACAAABAAACAAABAQAAAAIWAAAAZHJpcC5iZWVwb3B1bGEudGVzdG5ldCsAAAByZW5nYXVub2ZmaWNpYWwuY29tbXVuaXR5LmJlZXBvcHVsYS50ZXN0bmV0AAAAoe3MzhvC0wAAAAAAAAACAQAAAgIAAAMAAAQAAAUAAAYAAAcAAAgBAAkBAAoAAQALAAEADAABAA0AAQAOAAEAAQ==").unwrap();
-        // let state = OldCommunity::try_from_slice(&state).unwrap();
-        // let mut map = HashMap::new();
-        // map.insert("drip_contract".to_string(), "v2-drip.beepopula.testnet".to_string());
-        // let community = Community::new(AccountId::from_str("filo.testnet").unwrap(), map);
-        // let text = community.try_to_vec().unwrap();
-        // let text = base64::encode(text);
-        // println!("{:?}", text);
+        let state = base64::decode("DAAAAGZpbG8udGVzdG5ldAIAAAANAAAAZHJpcF9jb250cmFjdBYAAABkcmlwLmJlZXBvcHVsYS50ZXN0bmV0CgAAAHB1YmxpY19rZXksAAAARllMVjV6dFNlMkZqblJUQ0JIZ0UxSFVvQWlvSHVRQmF2Y0VLU2g3b0RxOWQBAAAAAQIAAAAAaQIAAAAAAAAAAgAAAABrAgAAAAAAAAACAAAAAHYBAAAAAQQAAAAsAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb20IAAAAQ3VyYXRvcnMzAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb21fbWVtYmVyBAAAAAQFBgcAAAAAAAAAACwAAABCazhGWUhXcWJ2aEdERndGdGNDWFduVDRMcGFwY3l3TjFLZXQ0aWdvSlJIZgYAAABBZG1pbnMzAAAAQms4RllIV3FidmhHREZ3RnRjQ1hXblQ0THBhcGN5d04xS2V0NGlnb0pSSGZfbWVtYmVyCgAAAAQFBgcICQwBAwAAAGJhbg0BAwAAAGJhbg4BCQAAAE1hbmFnZVBpbg4BCwAAAE1hbmFnZVJ1bGVzAQAAAAAAAAAsAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2EdAAAATkZUIFBhcmlzIE1hcmtldGluZyBDb21taXR0ZWUzAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2FfbWVtYmVyBAAAAAQFBgcAAAAAAAAAAAMAAABiYW4GAAAAQmFubmVkCgAAAGJhbl9tZW1iZXIAAAAAAAAAAGMAAAATAAAAAAAAAQEAAAACFgAAAGRyaXAuYmVlcG9wdWxhLnRlc3RuZXQrAAAAcmVuZ2F1bm9mZmljaWFsLmNvbW11bml0eS5iZWVwb3B1bGEudGVzdG5ldAAAAKHtzM4bwtMAAAAAAAAAAAEAAAACAAABAAACAAABAQAAAAIWAAAAZHJpcC5iZWVwb3B1bGEudGVzdG5ldCsAAAByZW5nYXVub2ZmaWNpYWwuY29tbXVuaXR5LmJlZXBvcHVsYS50ZXN0bmV0AAAAoe3MzhvC0wAAAAAAAAACAQAAAgIAAAMAAAQAAAUAAAYAAAcAAAgBAAkBAAoAAQALAAEADAABAA0AAQAOAAEAAQ==").unwrap();
+        let state = OldCommunity::try_from_slice(&state).unwrap();
+        let mut map = HashMap::new();
+        map.insert("drip_contract".to_string(), "v2-drip.beepopula.testnet".to_string());
+        let community = Community::new(AccountId::from_str("filo.testnet").unwrap(), map);
+        let text = community.try_to_vec().unwrap();
+        let text = base64::encode(text);
+        println!("{:?}", text);
     }
 
     #[test]
@@ -295,25 +300,26 @@ mod tests {
         println!("{:?}, {:?}", address, address.len())
     }
 
-    // #[cfg(not(target_arch = "wasm32"))]
-    #[cfg(feature = "unstable")]
     #[test]
     pub fn test_ecrecover() {
         use near_sdk::test_utils::test_env;
 
         test_env::setup_free();
-        let sign = "f0adef56c1292c6922e6ab36baf19ba8998aafe7abaeabb6452c2da83afc9fa07d58172e0d38b17b41d3d3f37b0b9ec23800519f1576912d5549bb2fb77dc4c5".to_string();
-        let message = ("123").as_bytes().to_vec();
+        let sign = "0220991b4ce76c195432033e2198dde50a6788cba37aa29c5be2afcb4ff4d8c2d41b9d636b7353b2877b59775f5c3cf04514fc0dabf76eb0dbadfc25d89c59e4".to_string();
+        let message = ("kinkrit.testnet").as_bytes().to_vec();
         let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
         let hash = env::keccak256(&[prefix, message].concat());
+        println!("{:?}", hash);
         let sign = hex::decode(sign).unwrap();
         
-        let (_, v) = fromRpcSig(&sign);
+        let (sign, v) = from_rpc_sig(&sign);
         println!("{:?}, {}", sign, v);
         let public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
         println!("{:?}", public_key);
         let account_id = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
-        println!("{:?}", account_id)
+        println!("{:?}", account_id);
+        // let address = to_checksum_address(account_id);
+        // println!("{:?}", address)
         // AccountId::from_str(&().unwrap();
     }
 
