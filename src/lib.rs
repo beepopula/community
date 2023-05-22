@@ -17,7 +17,6 @@ use drip::{Drip};
 use role::{RoleManagement};
 use uint::hex;
 use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage};
-use crate::events::Gather;
 use crate::post::Hierarchy;
 use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig};
 use std::convert::TryFrom;
@@ -261,9 +260,7 @@ impl Community {
         };
         let drips = self.drip.gather_drip(non_near_account_id.clone(), sender_id.clone());
 
-        Event::log_gather(
-            non_near_account_id,
-            sender_id,
+        Event::log_other(
             Some(json!({
                 "drips": drips
             }).to_string())

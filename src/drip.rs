@@ -29,6 +29,8 @@ pub fn get_map_value(key: &String) -> u128 {
         "be_liked":    "200000000000000000000000",     //be_liked                   passive
         "report":     "1000000000000000000000000",      //report                     passive
         "report_deposit": "1000000000000000000000000",//report_deposit            passive
+        "be_voted":        "200000000000000000000000",  //be_voted                 passive
+        "vote":        "200000000000000000000000"      //vote                     active
     }).to_string()).unwrap();
     let val = *map.get(key).unwrap_or(&(U128::from(0)));
     val.0
@@ -151,6 +153,16 @@ impl Drip {
         }
         let key = "invite".to_string();
         self.set_drip(key, None, &inviter_id, 100)
+    }
+
+    pub fn set_vote_drip(&mut self, voter_id: AccountId, per: u32) -> Vec<(AccountId, String, U128)> {
+        let key = "vote".to_string();
+        self.set_drip(key, None, &voter_id, per)
+    }
+
+    pub fn set_proposal_drip(&mut self, proposer_id: AccountId) -> Vec<(AccountId, String, U128)> {
+        let key = "be_voted".to_string();
+        self.set_drip(key, None, &proposer_id, 100)
     }
 
     pub fn gather_drip(&mut self, from: AccountId, to: AccountId) -> Vec<(AccountId, String, U128)> {

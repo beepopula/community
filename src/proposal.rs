@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::*;
+use crate::drip::get_map_value;
 use near_contract_standards::fungible_token;
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -14,16 +15,8 @@ pub const GAS_FOR_FT_TRANSFER: Gas = Gas(10_000_000_000_000);
 #[serde(crate = "near_sdk::serde")]
 pub enum ProposalStatus {
     InProgress,
-    /// If quorum voted yes, this proposal is successfully approved.
-    Approved,
-    /// If quorum voted no, this proposal is rejected. Bond is returned.
-    Rejected,
-    /// If quorum voted to remove (e.g. spam), this proposal is rejected and bond is not returned.
-    /// Interfaces shouldn't show removed proposals.
-    /// Expired after period of time.
     Expired,
-    Failed,
-    Finished
+    Result(u32)   //represents the option
 }
 
 /// Status of a proposal.
@@ -58,87 +51,110 @@ pub struct FunctionCall {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Clone, Debug))]
 #[serde(crate = "near_sdk::serde")]
 pub struct Transfer {
-    token_id: AccountId,
     receiver_id: AccountId,
     amount: U128,
-    msg: Option<String>,
-}
-
-/// Votes recorded in the proposal.
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq, PartialOrd)]
-#[serde(crate = "near_sdk::serde")]
-pub enum Vote {
-    Approve,
-    Reject
 }
 
 
 /// Proposal that are sent to this DAO.
-#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
-#[serde(crate = "near_sdk::serde")]
+#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Debug)]
 pub struct Proposal {
     pub method: String,
-    pub proposer: AccountId,
+    pub options: Vec<Opt>,
     pub asset: Option<AssetKey>,
-    pub description: String,
+    pub bond: Option<(AssetKey, U128)>,
+    pub begin: U64,
+    pub until: U64,
+    pub quorum: U64,
+    pub threshold: u32,
+
+    pub proposer: AccountId,
+    pub votes: UnorderedMap<AccountId, (u32, U128, U64)>,   //option, balance, index
+    pub execution_status: ExecutionStatus
+}
+
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
+#[derive(Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct Opt {
     pub action_kind: String,
     pub args: String,
-    pub vote_counts: HashMap<Vote, Balance>,
-    pub votes: HashMap<AccountId, (Vote, U128)>,
-    pub until: U64,
-    pub quorum: U128,
-    pub threshold: u32,
-    pub execution_status: ExecutionStatus
+    pub description: String,
+    pub vote_count: U128,
+    pub accounts: U64
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ProposalInput {
     pub method: String,
-    /// Description of this proposal.
-    pub description: String,
-    /// Kind of proposal with relevant information.
-    pub action_kind: String,
-    pub args: String,
+    pub options: Vec<(String, String, String)>, //action_kind, args, description
     pub asset: Option<AssetKey>,
+    pub bond: Option<(AssetKey, U128)>,
+    pub begin: U64,
     pub until: U64,
-    pub quorum: U128,
+    pub quorum: U64,
     pub threshold: u32,
 }
 
 impl From<ProposalInput> for Proposal {
     fn from(input: ProposalInput) -> Self {
+        let id = bs58::encode(env::sha256(json!(input).to_string().as_bytes())).into_string();
+        let mut options = vec![];
+        input.options.iter().for_each(|option| {
+            options.push(Opt {
+                action_kind: option.0.clone(),
+                args: option.1.clone(),
+                description: option.2.clone(),
+                vote_count: 0.into(),
+                accounts: 0.into()
+            })
+        });
         Self {
             method: input.method,
-            proposer: env::predecessor_account_id(),
-            description: input.description,
+            options: options,
             asset: input.asset,
-            action_kind: input.action_kind,
-            args: input.args,
-            vote_counts: HashMap::default(),
-            votes: HashMap::default(),
+            bond: input.bond,
+            begin: input.begin,
             until: input.until,
             quorum: input.quorum,
             threshold: input.threshold,
+
+            proposer: env::predecessor_account_id(),
+            votes: UnorderedMap::new(id.as_bytes()),
             execution_status: ExecutionStatus::NotStart
         }
     }
 }
 
 impl Proposal {
+    pub fn check_bond(
+        account_id: &AccountId,
+    ) {
+
+    }
+
+
     /// Adds vote of the given user with given `amount` of weight. If user already voted, fails.
     pub fn update_vote(
         &mut self,
         account_id: &AccountId,
-        vote: Vote,
+        vote: u32,
         amount: u128
     ) {
-        assert!(self.votes.contains_key(&account_id), "already voted");
+        assert!(self.votes.get(&account_id).is_none(), "already voted");
+        let mut accounts = LookupMap::new(StorageKey::Account);
+        let mut account: Account = accounts.get(account_id).unwrap();
+        match &self.bond {
+            Some((bond, amount)) => {
+                assert!(account.get_balance(bond) >= amount.0, "not enough bond");
+            },
+            None => {}
+        }
+
         let amount = match &self.asset {
             Some(asset) => {
-                let mut accounts = LookupMap::new(StorageKey::Account);
-                let mut account: Account = accounts.get(account_id).unwrap();
                 let amount = match asset {
                     AssetKey::Drip((token_id, contract_id)) => {
                         if *token_id == None && *contract_id == env::current_account_id() {
@@ -165,10 +181,10 @@ impl Proposal {
         let amount = match self.method.as_str() {
             _ => amount
         };
-        self.votes.insert(account_id.clone(), (vote.clone(), amount.into()));
-        let mut vote_count = *self.vote_counts.get(&vote).unwrap_or(&0);
-        vote_count += amount;
-        self.vote_counts.insert(vote, vote_count);
+        let mut option = self.options.get_mut(vote as usize).unwrap();
+        let index = option.accounts.0 + 1;
+        self.votes.insert(&account_id, &(vote.clone(), amount.into(), index.into()));
+        option.vote_count = (option.vote_count.0 + amount).into();
     }
 
     pub fn redeem_vote(&mut self, account_id: &AccountId) {
@@ -177,12 +193,12 @@ impl Proposal {
             matches!(status, ProposalStatus::InProgress),
             "not ready for redeem"
         );
-        assert!(self.votes.contains_key(&account_id), "account not found");
+        let (vote, amount, index) = self.votes.get(account_id).unwrap();
+        assert!(self.votes.get(&account_id).is_some(), "account not found");
         match &self.asset {
             Some(asset) => {
                 let mut accounts = LookupMap::new(StorageKey::Account);
                 let mut account: Account = accounts.get(account_id).unwrap();
-                let (vote, amount) = self.votes.get(account_id).unwrap();
                 match asset {
                     AssetKey::Drip((token_id, contract_id)) => {
                         if *token_id == None && *contract_id == env::current_account_id() {
@@ -200,6 +216,7 @@ impl Proposal {
             },
             None => ()
         }
+        self.votes.insert(account_id, &(vote, 0.into(), index));
     }
 
     pub fn get_status(
@@ -209,26 +226,23 @@ impl Proposal {
             return ProposalStatus::InProgress
         }
 
-        if (self.votes.len() as u128) < self.quorum.0 {
+        if self.votes.len() < self.quorum.0 {
             return ProposalStatus::Expired
         }
         let mut total = 0;
-        self.vote_counts.iter().for_each(|vote| {
-            total += vote.1
+        self.options.iter().for_each(|option| {
+            total += option.vote_count.0
         });
         let mut max_vote = (None, 0);
-        for (vote, count) in self.vote_counts.iter() {
-            if count * 100 / total > self.threshold as u128 {
-                if max_vote.1 < *count {
-                    max_vote = (Some(vote.clone()), *count)
+        for (index, option )in self.options.iter().enumerate() {
+            if option.vote_count.0 * 100 / total > self.threshold as u128 {
+                if max_vote.1 < option.vote_count.0 {
+                    max_vote = (Some(index as u32), option.vote_count.0)
                 }
             }
         }
         match max_vote.0 {
-            Some(vote) => match vote {
-                Vote::Approve => ProposalStatus::Approved,
-                Vote::Reject => ProposalStatus::Rejected
-            },
+            Some(option) => ProposalStatus::Result(option),
             None => ProposalStatus::Expired
         }
     }
@@ -236,11 +250,12 @@ impl Proposal {
     /// Executes given proposal and updates the contract's state.
     pub fn execute(
         &mut self,
-        proposal_id: String
+        proposal_id: String,
+        option: Opt
     ) -> PromiseOrValue<()> {
-        let result = match self.action_kind.as_str() {
+        let result = match option.action_kind.as_str() {
             "functionCall" => {
-                let args = serde_json::from_str::<FunctionCall>(&self.args).unwrap();
+                let args = serde_json::from_str::<FunctionCall>(&option.args).unwrap();
                 let mut promise = Promise::new(args.receiver_id.clone().into());
                 for action in args.actions {
                     promise = promise.function_call(
@@ -253,14 +268,8 @@ impl Proposal {
                 promise.into()
             }
             "transfer" => {
-                let args = serde_json::from_str::<Transfer>(&self.args).unwrap();
-                self.payout(
-                &args.token_id,
-                &args.receiver_id,
-                args.amount.0,
-                self.description.clone(),
-                args.msg.clone(),
-                )
+                let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
+                Promise::new(args.receiver_id.clone()).transfer(args.amount.0).into()
             },
             _ => PromiseOrValue::Value(())
         };
@@ -274,40 +283,6 @@ impl Proposal {
             PromiseOrValue::Value(()) => PromiseOrValue::Value(()),
         }
     }
-
-    fn payout(
-        &mut self,
-        token_id: &AccountId,
-        receiver_id: &AccountId,
-        amount: Balance,
-        memo: String,
-        msg: Option<String>,
-    ) -> PromiseOrValue<()> {
-        if token_id.to_string() == "near" {
-            Promise::new(receiver_id.clone()).transfer(amount).into()
-        } else {
-            if let Some(msg) = msg {
-                ext_ft_core::ext(token_id.clone())
-                    .with_attached_deposit(1)
-                    .ft_transfer_call(
-                        receiver_id.clone(),
-                        U128(amount),
-                        Some(memo),
-                        msg,
-                    )
-            } else {
-                ext_ft_core::ext(token_id.clone())
-                    .with_attached_deposit(1)
-                    .ft_transfer(
-                        receiver_id.clone(),
-                        U128(amount),
-                        Some(memo),
-                    )
-                    
-            }
-            .into()
-        }
-    }
 }
 
 
@@ -318,18 +293,13 @@ impl Community {
     pub fn add_proposal(&mut self, proposal: ProposalInput) -> String {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddProposal(Some(proposal.action_kind.clone()))), "not allowed");
-        match proposal.action_kind.as_str() {
-            "functionCall" => {
-                let args = serde_json::from_str::<FunctionCall>(&proposal.args).unwrap();
-                args.actions.iter().for_each(|action| {
-                    assert!(action.method_name.find("transfer").is_none() && action.method_name.find("approve").is_none(), "transfer is not allowed");
-                });
-            },
-            "transfer" => {
-            },
-            _ => ()
+        let mut have_action = false;
+        for option in proposal.options.iter() {
+            if !option.0.is_empty() {
+                have_action = true
+            }
         }
+        assert!(self.can_execute_action(sender_id.clone(), Permission::AddProposal(have_action)), "not allowed");
         let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
         let id = bs58::encode(env::sha256(json!(proposal).to_string().as_bytes())).into_string();
         proposals.insert(&id, &proposal.into());
@@ -339,12 +309,12 @@ impl Community {
         id
     }
 
-    pub fn vote(&mut self, id: String, vote: Vote, amount: U128) {
+    pub fn vote(&mut self, id: String, vote: u32, amount: U128) {
         let initial_storage_usage = env::storage_usage();
         let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
         let mut proposal: Proposal = proposals.get(&id).unwrap().into();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::Vote(Some(proposal.action_kind.clone()))), "not allowed");
+        assert!(self.can_execute_action(sender_id.clone(), Permission::Vote), "not allowed");
         assert!(
             matches!(proposal.get_status(), ProposalStatus::InProgress),
             "Expired"
@@ -354,7 +324,13 @@ impl Community {
             vote,
             amount.0
         ); 
+        let drips = self.drip.set_proposal_drip(proposal.proposer.clone());
         proposals.insert(&id, &proposal);
+        Event::log_other(
+            Some(json!({
+                "drips": drips
+            }).to_string())
+        );
         set_storage_usage(initial_storage_usage, None);
     }
 
@@ -371,11 +347,7 @@ impl Community {
         );
         // Updates proposal status with new votes using the policy.
         match status {
-            ProposalStatus::Approved => proposal.execute(id.clone()),
-            ProposalStatus::Rejected => {
-                proposal.execution_status = ExecutionStatus::Finished;
-                PromiseOrValue::Value(())
-            },
+            ProposalStatus::Result(option) => proposal.execute(id.clone(), proposal.options.get(option as usize).unwrap().clone()),
             _ => PromiseOrValue::Value(())
         };
 
@@ -423,8 +395,42 @@ impl Community {
         let mut proposal: Proposal = proposals.get(&proposal_id).unwrap().into();
         let sender_id = env::predecessor_account_id();
         proposal.redeem_vote(&sender_id);
-        proposals.insert(&proposal_id, &proposal);
-        // TODO: drip rewards
+        proposals.insert(&proposal_id, &proposal);  
+
+        let voter = proposal.votes.get(&sender_id).unwrap();
+        let drips = match proposal.get_status() {
+            ProposalStatus::Expired => self.drip.set_vote_drip(sender_id, 100),
+            ProposalStatus::Result(option) => {
+                if option == voter.0 {       //bonus
+                    let base_drip = U128::from(get_map_value(&"vote".to_string())).0;
+                    let total_drips = proposal.votes.len() as u128 * base_drip;
+                    let opt = proposal.options.get(option as usize).unwrap();
+                    let option_drips = opt.accounts.0 as u128 * base_drip;
+                    let option_accounts = opt.accounts.0;
+                    let rest_drips = total_drips - option_drips;
+                    let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
+                    let index = voter.2.0;
+                    let mut amount_per_account = base_drip;
+                    if index <= index_threshold {
+                        amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
+                    } else {
+                        amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
+                    }
+                    self.drip.set_vote_drip(sender_id, (amount_per_account * 100 / base_drip) as u32)
+                } else {
+                    vec![]
+                }
+            },
+            _ => panic!("in progress")
+        };
+        if drips.len() > 0 {
+            Event::log_other(
+                Some(json!({
+                    "drips": drips
+                }).to_string())
+            )
+        }
+        
     }
 }
 

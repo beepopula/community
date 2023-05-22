@@ -56,8 +56,8 @@ pub enum Permission {
     RemoveMember(Option<String>),
     Other(Option<String>),   //off-chain permission
 
-    AddProposal(Option<String>),  //account Id, method
-    Vote(Option<String>),
+    AddProposal(bool),  //false for no action proposal
+    Vote,
 }
 
 
@@ -82,7 +82,10 @@ impl RoleManagement {
         permissions.insert(Permission::Like, (Relationship::Or, None));
         permissions.insert(Permission::Unlike, (Relationship::Or, None));
         permissions.insert(Permission::Report, (Relationship::Or, None));
-        permissions.insert(Permission::AddProposal(None), (Relationship::Or, None));
+        permissions.insert(Permission::Vote, (Relationship::Or, None));
+        permissions.insert(Permission::AddProposal(false), (Relationship::Or, None));
+
+        permissions.insert(Permission::AddProposal(true), (Relationship::And, None));
         permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
         permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
         permissions.insert(Permission::SetRole(None), (Relationship::And, None));
@@ -410,18 +413,6 @@ impl Community {
                             None => return Some(false)
                         }
                     },
-                    Permission::AddProposal(_) => {
-                        match permissions.get(&Permission::AddProposal(None)) {
-                            Some(val) => val,
-                            None => return Some(false)
-                        }
-                    },
-                    Permission::Vote(_) => {
-                        match permissions.get(&Permission::Vote(None)) {
-                            Some(val) => val,
-                            None => return Some(false)
-                        }
-                    },
                     _ => return Some(false)
                 }
             }
@@ -485,8 +476,6 @@ impl Community {
                 }
             },
             Permission::Other(_) => permissions.contains(&permission) || permissions.contains(&Permission::Other(None)),
-            Permission::AddProposal(_) => permissions.contains(&permission) || permissions.contains(&Permission::AddProposal(None)),
-            Permission::Vote(_) => permissions.contains(&permission) || permissions.contains(&Permission::Vote(None)),
             _ => permissions.contains(&permission)
         }
     }

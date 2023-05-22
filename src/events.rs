@@ -17,14 +17,12 @@ pub enum Event {
     Invite(Vec<InviteData>),
     Refund(Vec<RefundData>),
     SetMetadata(Vec<Metadata>),
-    Gather(Vec<Gather>)
+    Other(Vec<Data>)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
-pub struct Gather {
-    pub from: AccountId,
-    pub to: AccountId,
+pub struct Data {
     pub memo: Option<String>
 }
 
@@ -155,23 +153,13 @@ impl Event {
         ]).log()
     }
 
-    pub fn log_refund(memo: Option<String>) {
-        Event::Refund(vec![
-            RefundData {
-                memo
-            }
-        ]).log()
-    }
-
     pub fn log_set_metadata(metadata: Vec<Metadata>) {
         Event::SetMetadata(metadata).log()
     }
 
-    pub fn log_gather(from: AccountId, to: AccountId, memo: Option<String>) {
-        Event::Gather(vec![
-            Gather {
-                from,
-                to,
+    pub fn log_other(memo: Option<String>) {
+        Event::Other(vec![
+            Data {
                 memo
             }
         ]).log()

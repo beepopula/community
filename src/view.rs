@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Vote, Proposal}};
+use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Proposal, Opt}};
 use near_sdk::Balance;
 use utils::get_content_hash;
 use post::Hierarchy;
@@ -21,15 +21,15 @@ pub struct RoleOutput {
 #[derive(Debug)]
 pub struct ProposalOutput {
     pub method: String,
-    pub proposer: AccountId,
+    pub options: Vec<Opt>,
     pub asset: Option<AssetKey>,
-    pub description: String,
-    pub action_kind: String,
-    pub args: String,
-    pub vote_counts: HashMap<Vote, Balance>,
+    pub bond: Option<(AssetKey, U128)>,
+    pub begin: U64,
     pub until: U64,
-    pub quorum: U128,
+    pub quorum: U64,
     pub threshold: u32,
+
+    pub proposer: AccountId,
     pub status: ProposalStatus
 }
 
@@ -114,15 +114,15 @@ impl Community {
         let status = proposal.get_status();
         ProposalOutput {
             method: proposal.method,
-            proposer: proposal.proposer,
+            options: proposal.options,
             asset: proposal.asset,
-            description: proposal.description,
-            action_kind: proposal.action_kind,
-            args: proposal.args,
-            vote_counts: proposal.vote_counts,
+            bond: proposal.bond,
+            begin: proposal.begin,
             until: proposal.until,
             quorum: proposal.quorum,
             threshold: proposal.threshold,
+
+            proposer: proposal.proposer,
             status: status
         }
     }
