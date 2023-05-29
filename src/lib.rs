@@ -14,6 +14,7 @@ use near_sdk::serde_json::{json, self, to_string};
 use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
+use proposal::Proposal;
 use role::{RoleManagement};
 use uint::hex;
 use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage};
@@ -51,6 +52,7 @@ pub struct Community {
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
     role_management: RoleManagement,
+    proposals: UnorderedMap<String, Proposal>,
     access: AccessLimit
 }
 
@@ -108,35 +110,42 @@ impl Community {
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
             role_management: RoleManagement::new(),
+            proposals: UnorderedMap::new(StorageKey::Proposals),
             access: AccessLimit::Registy
         };
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
+        this.accounts.insert(&owner_id, &account);
         let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
         account.set_registered(true);
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), u128::MAX);
-        this.accounts.insert(&owner_id, &account);
+        this.accounts.insert(&env::current_account_id(), &account);
         this
     }
 
-    // #[init(ignore_state)]
-    // pub fn migrate() -> Self {
-    //     let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
-    //     assert!(env::predecessor_account_id() == prev.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
+        assert!(env::predecessor_account_id() == prev.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
         
-    //     let this = Community {
-    //         owner_id: prev.owner_id,
-    //         args: prev.args,
-    //         accounts: prev.accounts,
-    //         reports: prev.reports,
-    //         drip: prev.drip,
-    //         role_management: prev.role_management,
-    //         access: prev.access
-    //     };
-    //     env::state_write::<Community>(&this);
-    //     this
-    // }
+        let mut this = Community {
+            owner_id: prev.owner_id,
+            args: prev.args,
+            accounts: prev.accounts,
+            reports: prev.reports,
+            drip: prev.drip,
+            role_management: prev.role_management,
+            proposals: UnorderedMap::new(StorageKey::Proposals),
+            access: prev.access
+        };
+        let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
+        account.set_registered(true);
+        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), u128::MAX);
+        this.accounts.insert(&env::current_account_id(), &account);
+        env::state_write::<Community>(&this);
+        this
+    }
 
     pub fn follow(&mut self, account_id: AccountId) {
         let sender_id = env::predecessor_account_id();

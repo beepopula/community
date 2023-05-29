@@ -54,6 +54,18 @@ impl Community {
         , "owner only");
         self.access = access;
     }
+
+    #[private]
+    pub fn distribute(&mut self, list: Vec<(AccountId, AssetKey, U128)>) {
+        for (account_id, asset, amount) in list {
+            let mut account = match self.accounts.get(&account_id) {
+                Some(v) => v,
+                None => continue
+            };
+            account.increase_balance(asset, amount.0);
+            self.accounts.insert(&account_id, &account);
+        }
+    }
 }
 
 #[no_mangle]

@@ -96,6 +96,7 @@ pub struct ProposalInput {
     pub until: U64,
     pub quorum: U64,
     pub threshold: u32,
+    pub desc: String
 }
 
 impl From<ProposalInput> for Proposal {
@@ -129,12 +130,6 @@ impl From<ProposalInput> for Proposal {
 }
 
 impl Proposal {
-    pub fn check_bond(
-        account_id: &AccountId,
-    ) {
-
-    }
-
 
     /// Adds vote of the given user with given `amount` of weight. If user already voted, fails.
     pub fn update_vote(
@@ -222,7 +217,7 @@ impl Proposal {
     pub fn get_status(
         &self,
     ) -> ProposalStatus {
-        if self.until.0 < env::block_timestamp() {
+        if self.until.0 > env::block_timestamp() {
             return ProposalStatus::InProgress
         }
 
@@ -233,6 +228,9 @@ impl Proposal {
         self.options.iter().for_each(|option| {
             total += option.vote_count.0
         });
+        if total == 0 {
+            return ProposalStatus::Expired
+        }
         let mut max_vote = (None, 0);
         for (index, option )in self.options.iter().enumerate() {
             if option.vote_count.0 * 100 / total > self.threshold as u128 {
@@ -300,9 +298,8 @@ impl Community {
             }
         }
         assert!(self.can_execute_action(sender_id.clone(), Permission::AddProposal(have_action)), "not allowed");
-        let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
-        let id = bs58::encode(env::sha256(json!(proposal).to_string().as_bytes())).into_string();
-        proposals.insert(&id, &proposal.into());
+        let id = bs58::encode(env::sha256((sender_id.to_string() + &json!(proposal).to_string()).as_bytes())).into_string();
+        self.proposals.insert(&id, &proposal.into());
         let public_key = PublicKey::from_str(&id).unwrap();
         Promise::new(env::current_account_id()).add_access_key(public_key, 250000000000000000000000, env::current_account_id(), "act_proposal".to_string());
         set_storage_usage(initial_storage_usage, None);
@@ -311,8 +308,7 @@ impl Community {
 
     pub fn vote(&mut self, id: String, vote: u32, amount: U128) {
         let initial_storage_usage = env::storage_usage();
-        let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
-        let mut proposal: Proposal = proposals.get(&id).unwrap().into();
+        let mut proposal: Proposal = self.proposals.get(&id).unwrap().into();
         let sender_id = env::predecessor_account_id();
         assert!(self.can_execute_action(sender_id.clone(), Permission::Vote), "not allowed");
         assert!(
@@ -325,7 +321,7 @@ impl Community {
             amount.0
         ); 
         let drips = self.drip.set_proposal_drip(proposal.proposer.clone());
-        proposals.insert(&id, &proposal);
+        self.proposals.insert(&id, &proposal);
         Event::log_other(
             Some(json!({
                 "drips": drips
@@ -338,8 +334,7 @@ impl Community {
     /// Memo is logged but not stored in the state. Can be used to leave notes or explain the action.
     #[private]
     pub fn act_proposal(&mut self, id: String, memo: Option<String>) {
-        let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
-        let mut proposal: Proposal = proposals.get(&id).unwrap().into();
+        let mut proposal: Proposal = self.proposals.get(&id).unwrap().into();
         let status = proposal.get_status();
         assert!(
             matches!(status, ProposalStatus::InProgress),
@@ -351,7 +346,7 @@ impl Community {
             _ => PromiseOrValue::Value(())
         };
 
-        proposals.insert(&id, &proposal);   
+        self.proposals.insert(&id, &proposal);   
         if let Some(memo) = memo {
             log!("Memo: {}", memo);
         }
@@ -363,8 +358,7 @@ impl Community {
     /// move proposal to "Failed" state.
     #[private]
     pub fn on_proposal_callback(&mut self, proposal_id: String) -> PromiseOrValue<()> {
-        let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
-        let mut proposal: Proposal = proposals
+        let mut proposal: Proposal = self.proposals
             .get(&proposal_id)
             .expect("ERR_NO_PROPOSAL")
             .into();
@@ -386,16 +380,15 @@ impl Community {
                 PromiseOrValue::Value(())
             },
         };
-        proposals.insert(&proposal_id, &proposal);
+        self.proposals.insert(&proposal_id, &proposal);
         result
     }
 
     pub fn redeem_vote(&mut self, proposal_id: String) {
-        let mut proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
-        let mut proposal: Proposal = proposals.get(&proposal_id).unwrap().into();
+        let mut proposal: Proposal = self.proposals.get(&proposal_id).unwrap().into();
         let sender_id = env::predecessor_account_id();
         proposal.redeem_vote(&sender_id);
-        proposals.insert(&proposal_id, &proposal);  
+        self.proposals.insert(&proposal_id, &proposal);  
 
         let voter = proposal.votes.get(&sender_id).unwrap();
         let drips = match proposal.get_status() {
@@ -406,7 +399,6 @@ impl Community {
                     let total_drips = proposal.votes.len() as u128 * base_drip;
                     let opt = proposal.options.get(option as usize).unwrap();
                     let option_drips = opt.accounts.0 as u128 * base_drip;
-                    let option_accounts = opt.accounts.0;
                     let rest_drips = total_drips - option_drips;
                     let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
                     let index = voter.2.0;
@@ -432,6 +424,11 @@ impl Community {
         }
         
     }
+
+    pub fn get_voter(&self, voter_id: AccountId, proposal_id: String) -> Option<(u32, U128, U64)> {
+        let proposal: Proposal = self.proposals.get(&proposal_id).unwrap().into();
+        proposal.votes.get(&voter_id)
+    }
 }
 
 
@@ -439,13 +436,34 @@ impl Community {
 mod tests {
     use std::str::FromStr;
 
-    use near_sdk::{bs58, env, PublicKey};
+    use near_sdk::{bs58, env, PublicKey, json_types::U64, serde_json::json};
+
+    use super::ProposalInput;
 
     #[test]
     pub fn test() {
         let id = bs58::encode(env::sha256("123".to_string().as_bytes())).into_string();
         let public_key = PublicKey::from_str(&id).unwrap();
         println!("{:?}", public_key)
+    }
+
+    #[test]
+    pub fn test_proposal() {
+        let proposal = ProposalInput {
+            method: "".to_string(),
+            options: vec![("".to_string(), "".to_string(), "1".to_string())],
+            asset: None,
+            bond: None,
+            begin: U64::from(1684764073137000000),
+            until: U64::from(1684850473137000000),
+            quorum: U64::from(0),
+            threshold: 0,
+            desc: "12333231".to_string()
+        };
+        let j = json!(proposal).to_string();
+        println!("{:?}", j);
+        let bytes = bs58::encode(env::sha256(j.as_bytes())).into_string();
+        println!("{:?}", bytes)
     }
 
 }

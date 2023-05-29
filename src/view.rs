@@ -109,8 +109,7 @@ impl Community {
     // }
 
     pub fn get_proposal(&self, id: String) -> ProposalOutput {
-        let proposals: UnorderedMap<String, Proposal> = UnorderedMap::new(StorageKey::Proposals);
-        let proposal: Proposal = proposals.get(&id).unwrap().into();
+        let proposal: Proposal = self.proposals.get(&id).unwrap().into();
         let status = proposal.get_status();
         ProposalOutput {
             method: proposal.method,
