@@ -15,7 +15,6 @@ pub enum Event {
 
     //custome events
     Invite(Vec<InviteData>),
-    Refund(Vec<RefundData>),
     SetMetadata(Vec<Metadata>),
     Other(Vec<Data>)
 }
@@ -31,12 +30,6 @@ pub struct Data {
 pub struct Metadata {
     pub key: String,
     pub val: String
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub struct RefundData {
-    pub memo: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Debug)]

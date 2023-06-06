@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::*;
 use crate::drip::get_map_value;
+use ed25519_dalek::{ExpandedSecretKey, SecretKey};
 use near_contract_standards::fungible_token;
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -96,7 +97,6 @@ pub struct ProposalInput {
     pub until: U64,
     pub quorum: U64,
     pub threshold: u32,
-    pub desc: String
 }
 
 impl From<ProposalInput> for Proposal {
@@ -185,7 +185,7 @@ impl Proposal {
     pub fn redeem_vote(&mut self, account_id: &AccountId) {
         let status = self.get_status();
         assert!(
-            matches!(status, ProposalStatus::InProgress),
+            !matches!(status, ProposalStatus::InProgress),
             "not ready for redeem"
         );
         let (vote, amount, index) = self.votes.get(account_id).unwrap();
@@ -298,9 +298,12 @@ impl Community {
             }
         }
         assert!(self.can_execute_action(sender_id.clone(), Permission::AddProposal(have_action)), "not allowed");
-        let id = bs58::encode(env::sha256((sender_id.to_string() + &json!(proposal).to_string()).as_bytes())).into_string();
+        let id_string= sender_id.to_string() + &json!(proposal).to_string() + &env::block_timestamp().to_string();
+        let id = bs58::encode(env::sha256(id_string.as_bytes())).into_string();
         self.proposals.insert(&id, &proposal.into());
-        let public_key = PublicKey::from_str(&id).unwrap();
+        let access_key = SecretKey::from_bytes(&env::sha256(id_string.as_bytes())).unwrap();
+        let pk: ed25519_dalek::PublicKey = (&access_key).into();
+        let public_key = PublicKey::try_from([vec![0], pk.as_bytes().to_vec()].concat()).unwrap();
         Promise::new(env::current_account_id()).add_access_key(public_key, 250000000000000000000000, env::current_account_id(), "act_proposal".to_string());
         set_storage_usage(initial_storage_usage, None);
         id
@@ -333,11 +336,11 @@ impl Community {
     /// Act on given proposal by id, if permissions allow.
     /// Memo is logged but not stored in the state. Can be used to leave notes or explain the action.
     #[private]
-    pub fn act_proposal(&mut self, id: String, memo: Option<String>) {
+    pub fn act_proposal(&mut self, id: String) {
         let mut proposal: Proposal = self.proposals.get(&id).unwrap().into();
         let status = proposal.get_status();
         assert!(
-            matches!(status, ProposalStatus::InProgress),
+            !matches!(status, ProposalStatus::InProgress),
             "not ready for action"
         );
         // Updates proposal status with new votes using the policy.
@@ -347,9 +350,6 @@ impl Community {
         };
 
         self.proposals.insert(&id, &proposal);   
-        if let Some(memo) = memo {
-            log!("Memo: {}", memo);
-        }
     }
 
     /// Receiving callback after the proposal has been finalized.
@@ -434,11 +434,26 @@ impl Community {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{str::FromStr, convert::TryFrom};
 
+    use ed25519_dalek::{SecretKey, ExpandedSecretKey, Sha512};
     use near_sdk::{bs58, env, PublicKey, json_types::U64, serde_json::json};
 
     use super::ProposalInput;
+
+    #[test]
+    pub fn test_pk() {
+        let text = "1".to_string();
+        let access_key = SecretKey::from_bytes(&env::sha256(text.as_bytes())).unwrap();
+        let pk: ed25519_dalek::PublicKey = (&access_key).into();
+        println!("{:?}", bs58::encode(pk.as_bytes().to_vec()).into_string());
+        
+        let access_key = ExpandedSecretKey::from(&access_key);
+        let pk: ed25519_dalek::PublicKey = (&access_key).into();
+        println!("{:?}", bs58::encode(pk.as_bytes().to_vec()).into_string());
+        println!("{:?}", pk.as_bytes().to_vec());
+        let public_key = PublicKey::try_from([vec![0], pk.as_bytes().to_vec()].concat()).unwrap();
+    }
 
     #[test]
     pub fn test() {
@@ -458,7 +473,6 @@ mod tests {
             until: U64::from(1684850473137000000),
             quorum: U64::from(0),
             threshold: 0,
-            desc: "12333231".to_string()
         };
         let j = json!(proposal).to_string();
         println!("{:?}", j);

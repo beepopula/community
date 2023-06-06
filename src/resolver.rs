@@ -14,8 +14,8 @@ use near_sdk::PromiseOrValue;
 pub enum MsgInput {
     Report(ReportInput),
     RevokeReport(ReportInput),
-    Deposit(AssetKey),
-
+    Deposit,
+    Donate
 }
 
 #[derive(Serialize, Deserialize)]
@@ -32,18 +32,19 @@ impl FtReceiver for Community {
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
-            MsgInput::Deposit(balance) => {
+            MsgInput::Deposit => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = accounts.get(&sender_id).unwrap_or_default();
-                match balance {
-                    AssetKey::FT(token_id) => {
-                        assert!(token_id == env::predecessor_account_id(), "wrong drip");
-                        account.increase_balance(AssetKey::FT(token_id), amount.0);
-                        accounts.insert(&sender_id, &account);
-                        PromiseOrValue::Value(0.into())
-                    }
-                    _ => {PromiseOrValue::Value(amount)}
-                }
+                account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
+                accounts.insert(&sender_id, &account);
+                PromiseOrValue::Value(0.into())
+            },
+            MsgInput::Donate => {
+                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+                let mut account = accounts.get(&env::current_account_id()).unwrap_or_default();
+                account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
+                accounts.insert(&sender_id, &account);
+                PromiseOrValue::Value(0.into())
             },
             _ => {PromiseOrValue::Value(amount)}
         }

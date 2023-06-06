@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Proposal, Opt}};
+use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Proposal, Opt, ExecutionStatus}};
 use near_sdk::Balance;
 use utils::get_content_hash;
 use post::Hierarchy;
@@ -30,7 +30,8 @@ pub struct ProposalOutput {
     pub threshold: u32,
 
     pub proposer: AccountId,
-    pub status: ProposalStatus
+    pub status: ProposalStatus,
+    pub execution_status: ExecutionStatus
 }
 
 
@@ -122,7 +123,8 @@ impl Community {
             threshold: proposal.threshold,
 
             proposer: proposal.proposer,
-            status: status
+            status: status,
+            execution_status: proposal.execution_status
         }
     }
 }
