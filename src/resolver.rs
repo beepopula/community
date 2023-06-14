@@ -41,9 +41,9 @@ impl FtReceiver for Community {
             },
             MsgInput::Donate => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-                let mut account = accounts.get(&env::current_account_id()).unwrap_or_default();
+                let mut account = accounts.get(&env::current_account_id()).unwrap();
                 account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
-                accounts.insert(&sender_id, &account);
+                accounts.insert(&env::current_account_id(), &account);
                 PromiseOrValue::Value(0.into())
             },
             _ => {PromiseOrValue::Value(amount)}

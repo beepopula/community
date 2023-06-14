@@ -6,7 +6,6 @@ use std::str::FromStr;
 use account::Account;
 // use near_fixed_bit_tree::BitTree;
 use events::Event;
-use near_fixed_bit_tree::BitTree;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
@@ -225,12 +224,12 @@ impl Community {
         set_storage_usage(initial_storage_usage, None);
     }
 
-    pub fn withdraw(&mut self, amount: U128) {
+    pub fn withdraw(&mut self, asset: AssetKey, amount: U128) {
         let sender_id = env::predecessor_account_id();
         let mut account = self.accounts.get(&sender_id).unwrap_or_default();
-        account.decrease_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), amount.0);
+        account.decrease_balance(asset, amount.0);
         self.accounts.insert(&sender_id, &account);
-        Promise::new(sender_id).transfer(amount.0);
+        // Promise::new(sender_id).transfer(amount.0);
     }
 
     #[payable]

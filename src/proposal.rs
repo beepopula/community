@@ -35,7 +35,7 @@ pub enum ExecutionStatus {
 #[serde(crate = "near_sdk::serde")]
 pub struct ActionCall {
     method_name: String,
-    args: Base64VecU8,
+    args: String,
     deposit: U128,
     gas: U64,
 }
@@ -52,8 +52,12 @@ pub struct FunctionCall {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Clone, Debug))]
 #[serde(crate = "near_sdk::serde")]
 pub struct Transfer {
+    asset: AssetKey,
     receiver_id: AccountId,
+    msg: String,
+    memo: Option<String>,
     amount: U128,
+    // token_id: Option<String>  //NFT token id
 }
 
 
@@ -258,7 +262,7 @@ impl Proposal {
                 for action in args.actions {
                     promise = promise.function_call(
                         action.method_name.clone().into(),
-                        action.args.clone().into(),
+                        action.args.clone().as_bytes().to_vec(),
                         action.deposit.0,
                         Gas(action.gas.0),
                     )
@@ -266,10 +270,27 @@ impl Proposal {
                 promise.into()
             }
             "transfer" => {
+                let accounts = LookupMap::new(StorageKey::Account);
+                let community: Account = accounts.get(&env::current_account_id()).unwrap();
                 let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
-                Promise::new(args.receiver_id.clone()).transfer(args.amount.0).into()
+                match &args.asset {
+                    AssetKey::FT(token_id) => {
+                        assert!(community.get_balance(&args.asset) >= args.amount.0, "not enough balance");
+                        if token_id.to_string() == "near" {
+                            Promise::new(args.receiver_id.clone()).transfer(args.amount.0).into()
+                        } else {
+                            ext_ft_core::ext(token_id.clone()).ft_transfer_call(args.receiver_id, args.amount, args.memo, args.msg).into()
+                        }
+                    },
+                    AssetKey::NFT(contract_id, token_id) => PromiseOrValue::Value(()),
+                    _  => PromiseOrValue::Value(())
+                }
+                
             },
-            _ => PromiseOrValue::Value(())
+            _ => {
+                self.execution_status = ExecutionStatus::Finished;
+                PromiseOrValue::Value(())
+            }
         };
         match result {
             PromiseOrValue::Promise(promise) => promise
@@ -278,7 +299,8 @@ impl Proposal {
                         proposal_id,
                     ))
                 .into(),
-            PromiseOrValue::Value(()) => PromiseOrValue::Value(()),
+            PromiseOrValue::Value(()) => PromiseOrValue::Value(())
+
         }
     }
 }
@@ -295,9 +317,25 @@ impl Community {
         for option in proposal.options.iter() {
             if !option.0.is_empty() {
                 have_action = true
+            } else {
+                match option.0.as_str() {
+                    "functionCall" => {
+                        let args = serde_json::from_str::<FunctionCall>(&option.1).unwrap();
+                        args.actions.iter().for_each(|action| {
+                            assert!(!action.method_name.contains("transfer"), "transfer is not allowed")
+                        })
+                        
+                    },
+                    _ => {}
+                }
+                
             }
         }
         assert!(self.can_execute_action(sender_id.clone(), Permission::AddProposal(have_action)), "not allowed");
+        // TODO
+        // if have_action {
+        //     assert!(proposal.until.0 - proposal.begin.0 > 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
+        // }
         let id_string= sender_id.to_string() + &json!(proposal).to_string() + &env::block_timestamp().to_string();
         let id = bs58::encode(env::sha256(id_string.as_bytes())).into_string();
         self.proposals.insert(&id, &proposal.into());
@@ -370,13 +408,24 @@ impl Community {
         let result = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
+                let mut community: Account = self.accounts.get(&env::current_account_id()).unwrap();
+                let status = proposal.get_status();
+                if let ProposalStatus::Result(index) = status {
+                    let option = proposal.options.get(index as usize).unwrap();
+                    if option.action_kind == "transfer".to_string() {
+                        let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
+                        community.decrease_balance(args.asset, args.amount.0);
+                        self.accounts.insert(&env::current_account_id(), &community);
+                    }
+                }
+
                 let public_key = PublicKey::from_str(&proposal_id).unwrap();
                 Promise::new(env::current_account_id()).delete_key(public_key);
                 proposal.execution_status = ExecutionStatus::Finished;
                 PromiseOrValue::Value(())
             },
             PromiseResult::Failed => {
-                proposal.execution_status = ExecutionStatus::Finished;
+                proposal.execution_status = ExecutionStatus::Failed;
                 PromiseOrValue::Value(())
             },
         };
@@ -437,9 +486,9 @@ mod tests {
     use std::{str::FromStr, convert::TryFrom};
 
     use ed25519_dalek::{SecretKey, ExpandedSecretKey, Sha512};
-    use near_sdk::{bs58, env, PublicKey, json_types::U64, serde_json::json};
+    use near_sdk::{bs58, env, PublicKey, json_types::{U64, U128, Base64VecU8}, serde_json::{json, self}, AccountId, Promise};
 
-    use super::ProposalInput;
+    use super::{ProposalInput, Opt, FunctionCall, ActionCall};
 
     #[test]
     pub fn test_pk() {
@@ -479,5 +528,33 @@ mod tests {
         let bytes = bs58::encode(env::sha256(j.as_bytes())).into_string();
         println!("{:?}", bytes)
     }
+
+    #[test]
+    pub fn test_execution() {
+        let args = FunctionCall {
+            receiver_id: AccountId::from_str("2023-5.community-genesis2.bhc8521.testnet").unwrap(),
+            actions: vec![ActionCall {
+                method_name: "distribute".to_string(),
+                args: "{\"list\":[[\"edzwiggle.testnet\",{\"FT\":\"near\"},\"20000000000000000000000\"],[\"wcs.testnet\",{\"FT\":\"near\"},\"10000000000000000000000\"],[\"gugu1997.testnet\",{\"FT\":\"near\"},\"40000000000000000000000\"],[\"kinkrit.testnet\",{\"FT\":\"near\"},\"800000000000000000000000\"],[\"171111.testnet\",{\"FT\":\"near\"},\"130000000000000000000000\"]],\"extra\":{\"token\":\"near\",\"amount\":\"1000000000000000000000000\",\"distribution\":\"proportionally\",\"receiver\":\"group\",\"group\":\"9USnArW9LZS8b2NAV1M3CiLkcCRBNewSn8TezJu1tJh4\"}}".to_string(),
+                gas: 300000000000000.into(),
+                deposit: 0.into()
+            }]
+        };
+        let option = Opt {
+            action_kind: "functionCall".to_string(),
+            args: json!(args).to_string(),
+            description: "Yes".to_string(),
+            vote_count: U128::from(1),
+            accounts: U64::from(0)
+        };
+        let result = match option.action_kind.as_str() {
+            "functionCall" => {
+                serde_json::from_str::<FunctionCall>(&option.args).unwrap()
+            },
+            _ => panic!("error")
+        };
+        println!("{:?}", result)
+    }
+    
 
 }

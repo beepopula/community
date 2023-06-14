@@ -3,7 +3,6 @@
 use std::convert::TryFrom;
 
 use ed25519_dalek::Verifier;
-use near_fixed_bit_tree::BitTree;
 use near_sdk::{Balance, StorageUsage, Promise, log};
 
 use crate::*;
@@ -63,42 +62,6 @@ pub(crate) fn get_root_id(contract_id: AccountId) -> AccountId {
     AccountId::try_from(root_id).unwrap()
 }
 
-pub(crate) fn get_and_reset_old_data(key: &[u8]) -> Option<Vec<u8>> {
-    let mut val = None;
-    for i in 0..2 {
-        let mut bit_tree = BitTree::new(28, vec![i], u16::BITS as u8);
-        val = match bit_tree.get(key) {
-            Some(v) => {
-                bit_tree.del(key);
-                set(key, v.try_to_vec().unwrap());
-                Some(v.try_to_vec().unwrap())
-            },
-            None => {
-                continue
-            }
-        };
-    }
-    val
-}
-
-pub(crate) fn check_and_reset_old_data(key: &[u8]) -> bool {
-    let mut val = false;
-    for i in 0..2 {
-        let mut bit_tree = BitTree::new(28, vec![i], u16::BITS as u8);
-        val = match bit_tree.get(key) {
-            Some(v) => {
-                bit_tree.del(key);
-                set(key, v.try_to_vec().unwrap());
-                true
-            },
-            None => {
-                continue
-            }
-        };
-    }
-    val
-}
-
 pub(crate) fn set<T>(key: &[u8], val: T) 
 where T: BorshSerialize + BorshDeserialize
 {
@@ -112,35 +75,22 @@ where T: BorshSerialize + BorshDeserialize
         Some(mut v) => {
             Some(BorshDeserialize::deserialize(&mut v.as_slice()).unwrap())
         },
-        None => match get_and_reset_old_data(key) {
-            Some(old_val) => Some(T::try_from_slice(&old_val).unwrap()),
-            None => None
-        }
+        None => None
     }
 }
 
 pub(crate) fn check(key: &[u8]) -> bool {
-    match env::storage_has_key(key) {
-        true => true,
-        false => {
-            check_and_reset_old_data(key)
-        }
-    }
+    env::storage_has_key(key)
 }
 
 pub(crate) fn remove(key: &[u8]) {
-    if !env::storage_remove(key) {
-        check_and_reset_old_data(key);
-    }
+    env::storage_remove(key);
 }
 
 pub(crate) fn check_and_set<T>(key: &[u8], val: T) -> bool 
 where T: BorshSerialize + BorshDeserialize
 {
     let check = check(key);
-    if !check {
-        check_and_reset_old_data(key);
-    }
     set(key, val);
     check
 }
@@ -227,7 +177,7 @@ pub(crate) fn set_storage_usage(initial_storage_usage: u64, account_id: Option<A
     let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
     let account_id = match account_id {
         Some(account_id) => account_id,
-        None => env::predecessor_account_id()
+        None => env::signer_account_id()
     };
     let mut account = accounts.get(&account_id).unwrap();
     let balance = AssetKey::FT(AccountId::from_str("near").unwrap());

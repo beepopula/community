@@ -57,14 +57,21 @@ impl Community {
 
     #[private]
     pub fn distribute(&mut self, list: Vec<(AccountId, AssetKey, U128)>) {
+        let mut community = self.accounts.get(&env::current_account_id()).unwrap();
         for (account_id, asset, amount) in list {
-            let mut account = match self.accounts.get(&account_id) {
-                Some(v) => v,
-                None => continue
+            match asset {
+                AssetKey::Drip(_) => panic!("not allowed"), 
+                _ => {}
             };
-            account.increase_balance(asset, amount.0);
-            self.accounts.insert(&account_id, &account);
+            let mut account = self.accounts.get(&account_id).unwrap_or_default();
+            let balance = community.get_balance(&asset);
+            if let Some(_) = balance.checked_sub(amount.0) {
+                account.increase_balance(asset.clone(), amount.0);
+                self.accounts.insert(&account_id, &account);
+                community.decrease_balance(asset, amount.0)
+            }
         }
+        self.accounts.insert(&env::current_account_id(), &community);
     }
 }
 

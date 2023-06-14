@@ -14,8 +14,8 @@ const TOTAL_CONTENT_COUNT: &str = "total_content_count";
 #[derive(Debug, Clone)]
 pub enum AssetKey {
     FT(AccountId),
-    NFT(AccountId),
-    Drip((Option<AccountId>, AccountId))
+    NFT(AccountId, String),               //nft token id, token id
+    Drip((Option<AccountId>, AccountId))  //drip token id, contract id
 }
 
 
