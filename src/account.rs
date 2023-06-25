@@ -14,7 +14,7 @@ const TOTAL_CONTENT_COUNT: &str = "total_content_count";
 #[derive(Debug, Clone)]
 pub enum AssetKey {
     FT(AccountId),
-    NFT(AccountId, String),               //nft token id, token id
+    NFT(AccountId, Option<String>),               //nft token id, token id
     Drip((Option<AccountId>, AccountId))  //drip token id, contract id
 }
 
@@ -26,7 +26,7 @@ fn get_account_decay(count: u64) -> u32 {
     40
 }
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Clone)]
 #[derive(Debug)]
 pub struct Account {
     pub data: HashMap<String, String>,
@@ -62,6 +62,22 @@ impl Account {
         this.data.insert(TOTAL_CONTENT_COUNT.to_string(), 0.to_string());
         
         this
+    }
+
+    pub fn registered(self) -> Self {
+        if self.is_registered() {
+            self
+        } else {
+            panic!("not registered")
+        }
+    }
+
+    pub fn get_registered(self) -> Option<Self> {
+        if self.is_registered() {
+            Some(self)
+        } else {
+            None
+        }
     }
 
     pub fn is_registered(&self) -> bool {

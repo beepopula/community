@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, utils::get_account};
 use account::AssetKey;
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -60,9 +60,8 @@ pub enum Relationship {
 
 impl Access {
     pub fn check_account(&self, account_id: &AccountId) -> bool {
-        let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-        let account = match accounts.get(account_id) {
-            Some(v)  => v,
+        let account = match get_account(account_id).get_registered() {
+            Some(v) => v,
             None => return false
         };
         let mut fullfill = true;

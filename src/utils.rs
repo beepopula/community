@@ -137,17 +137,24 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
 }
 
 pub(crate) fn is_registered(account_id: &AccountId) -> bool {
-    match get_access_limit() {
-        AccessLimit::Free => true,
-        _ => {
-            let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-            match accounts.get(&account_id) {
-                Some(v) => v.is_registered(),
-                None => false
-            }
-        }
+    let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+    match accounts.get(&account_id) {
+        Some(v) => v.is_registered(),
+        None => false
     }
-    
+}
+
+pub(crate) fn get_account(account_id: &AccountId) -> Account {
+    let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+    match accounts.get(&account_id) {
+        Some(v) => v,
+        None => Account::default()
+    }
+}
+
+pub(crate) fn set_account(account_id: &AccountId, account: &Account) {
+    let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+    accounts.insert(account_id, account);
 }
 
 pub(crate) fn get_arg<T>(key: &str) -> Option<T> 

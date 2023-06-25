@@ -1,4 +1,4 @@
-use crate::{*, utils::get_root_id};
+use crate::{*, utils::{get_root_id, is_registered}};
 use utils::get_parent_contract_id;
 
 #[near_bindgen]
@@ -57,13 +57,16 @@ impl Community {
 
     #[private]
     pub fn distribute(&mut self, list: Vec<(AccountId, AssetKey, U128)>) {
-        let mut community = self.accounts.get(&env::current_account_id()).unwrap();
+        let mut community = get_account(&env::current_account_id()).registered();
         for (account_id, asset, amount) in list {
             match asset {
                 AssetKey::Drip(_) => panic!("not allowed"), 
                 _ => {}
             };
-            let mut account = self.accounts.get(&account_id).unwrap_or_default();
+            let mut account = match get_account(&account_id).get_registered() {
+                Some(v) => v,
+                None => continue
+            };
             let balance = community.get_balance(&asset);
             if let Some(_) = balance.checked_sub(amount.0) {
                 account.increase_balance(asset.clone(), amount.0);

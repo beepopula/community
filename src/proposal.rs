@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::*;
 use crate::drip::get_map_value;
+use crate::utils::{get_account, set_account};
 use ed25519_dalek::{ExpandedSecretKey, SecretKey};
 use near_contract_standards::fungible_token;
 use near_contract_standards::fungible_token::core::ext_ft_core;
@@ -143,8 +144,7 @@ impl Proposal {
         amount: u128
     ) {
         assert!(self.votes.get(&account_id).is_none(), "already voted");
-        let mut accounts = LookupMap::new(StorageKey::Account);
-        let mut account: Account = accounts.get(account_id).unwrap();
+        let mut account: Account = get_account(account_id).registered();
         match &self.bond {
             Some((bond, amount)) => {
                 assert!(account.get_balance(bond) >= amount.0, "not enough bond");
@@ -172,7 +172,7 @@ impl Proposal {
                     _ => amount,
                 };
                 account.decrease_balance(asset.clone(), amount);
-                accounts.insert(account_id, &account);
+                set_account(account_id, &account);
                 amount
             }
             None => 1,
@@ -184,6 +184,8 @@ impl Proposal {
         let index = option.accounts.0 + 1;
         self.votes.insert(&account_id, &(vote.clone(), amount.into(), index.into()));
         option.vote_count = (option.vote_count.0 + amount).into();
+        option.accounts = (option.accounts.0 + 1).into();
+        
     }
 
     pub fn redeem_vote(&mut self, account_id: &AccountId) {
@@ -196,8 +198,7 @@ impl Proposal {
         assert!(self.votes.get(&account_id).is_some(), "account not found");
         match &self.asset {
             Some(asset) => {
-                let mut accounts = LookupMap::new(StorageKey::Account);
-                let mut account: Account = accounts.get(account_id).unwrap();
+                let mut account: Account = get_account(account_id).registered();
                 match asset {
                     AssetKey::Drip((token_id, contract_id)) => {
                         if *token_id == None && *contract_id == env::current_account_id() {
@@ -211,7 +212,7 @@ impl Proposal {
                     },
                     _ => account.increase_balance(asset.clone(), amount.0)
                 }
-                accounts.insert(account_id, &account);
+                set_account(account_id, &account);
             },
             None => ()
         }
@@ -255,6 +256,7 @@ impl Proposal {
         proposal_id: String,
         option: Opt
     ) -> PromiseOrValue<()> {
+        assert!(self.execution_status != ExecutionStatus::Finished, "already executed");
         let result = match option.action_kind.as_str() {
             "functionCall" => {
                 let args = serde_json::from_str::<FunctionCall>(&option.args).unwrap();
@@ -270,8 +272,7 @@ impl Proposal {
                 promise.into()
             }
             "transfer" => {
-                let accounts = LookupMap::new(StorageKey::Account);
-                let community: Account = accounts.get(&env::current_account_id()).unwrap();
+                let community: Account = get_account(&env::current_account_id()).registered();
                 let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
                 match &args.asset {
                     AssetKey::FT(token_id) => {
@@ -408,7 +409,7 @@ impl Community {
         let result = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
-                let mut community: Account = self.accounts.get(&env::current_account_id()).unwrap();
+                let mut community: Account = get_account(&env::current_account_id()).registered();
                 let status = proposal.get_status();
                 if let ProposalStatus::Result(index) = status {
                     let option = proposal.options.get(index as usize).unwrap();
@@ -419,7 +420,9 @@ impl Community {
                     }
                 }
 
-                let public_key = PublicKey::from_str(&proposal_id).unwrap();
+                let access_key = SecretKey::from_bytes(&bs58::decode(proposal_id.clone()).into_vec().unwrap()).unwrap();
+                let pk: ed25519_dalek::PublicKey = (&access_key).into();
+                let public_key = PublicKey::try_from([vec![0], pk.as_bytes().to_vec()].concat()).unwrap();
                 Promise::new(env::current_account_id()).delete_key(public_key);
                 proposal.execution_status = ExecutionStatus::Finished;
                 PromiseOrValue::Value(())
@@ -488,7 +491,9 @@ mod tests {
     use ed25519_dalek::{SecretKey, ExpandedSecretKey, Sha512};
     use near_sdk::{bs58, env, PublicKey, json_types::{U64, U128, Base64VecU8}, serde_json::{json, self}, AccountId, Promise};
 
-    use super::{ProposalInput, Opt, FunctionCall, ActionCall};
+    use crate::view::ProposalOutput;
+
+    use super::{ProposalInput, Opt, FunctionCall, ActionCall, Proposal};
 
     #[test]
     pub fn test_pk() {
@@ -556,5 +561,37 @@ mod tests {
         println!("{:?}", result)
     }
     
+
+    #[test]
+    pub fn test_vote() {
+        let proposalInput = ProposalInput {
+            method: "".to_string(),
+            options: vec![("".to_string(), "".to_string(), "haha".to_string())],
+            asset: None,
+            bond: None,
+            begin: 0.into(),
+            until: 0.into(),
+            quorum: 0.into(),
+            threshold: 0
+        };
+        let mut proposal: Proposal = proposalInput.into();
+        proposal.update_vote(&AccountId::from_str("kinkrit.testnet").unwrap(), 0, 0);
+        let status = proposal.get_status();
+        let output = ProposalOutput {
+            method: proposal.method,
+            options: proposal.options,
+            asset: proposal.asset,
+            bond: proposal.bond,
+            begin: proposal.begin,
+            until: proposal.until,
+            quorum: proposal.quorum,
+            threshold: proposal.threshold,
+
+            proposer: proposal.proposer,
+            status: status,
+            execution_status: proposal.execution_status
+        };
+        println!("{:?}", output);
+    }
 
 }

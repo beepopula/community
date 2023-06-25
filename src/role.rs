@@ -70,32 +70,32 @@ pub struct RoleManagement {
 
 impl RoleManagement {
     pub fn new() -> Self {
-        let mut permissions = HashMap::new();
-        permissions.insert(Permission::AddContent(0), (Relationship::Or, None));
-        permissions.insert(Permission::AddContent(1), (Relationship::Or, None));
-        permissions.insert(Permission::AddContent(2), (Relationship::Or, None));
-        permissions.insert(Permission::DelContent, (Relationship::Or, None));
-        permissions.insert(Permission::AddEncryptContent(0), (Relationship::Or, None));
-        permissions.insert(Permission::AddEncryptContent(1), (Relationship::Or, None));
-        permissions.insert(Permission::AddEncryptContent(2), (Relationship::Or, None));
-        permissions.insert(Permission::DelEncryptContent, (Relationship::Or, None));
-        permissions.insert(Permission::Like, (Relationship::Or, None));
-        permissions.insert(Permission::Unlike, (Relationship::Or, None));
-        permissions.insert(Permission::Report, (Relationship::Or, None));
-        permissions.insert(Permission::Vote, (Relationship::Or, None));
-        permissions.insert(Permission::AddProposal(false), (Relationship::Or, None));
+        let mut global_permissions = HashMap::new();
+        global_permissions.insert(Permission::AddContent(0), (Relationship::Or, None));
+        global_permissions.insert(Permission::AddContent(1), (Relationship::Or, None));
+        global_permissions.insert(Permission::AddContent(2), (Relationship::Or, None));
+        global_permissions.insert(Permission::DelContent, (Relationship::Or, None));
+        global_permissions.insert(Permission::AddEncryptContent(0), (Relationship::Or, None));
+        global_permissions.insert(Permission::AddEncryptContent(1), (Relationship::Or, None));
+        global_permissions.insert(Permission::AddEncryptContent(2), (Relationship::Or, None));
+        global_permissions.insert(Permission::DelEncryptContent, (Relationship::Or, None));
+        global_permissions.insert(Permission::Like, (Relationship::Or, None));
+        global_permissions.insert(Permission::Unlike, (Relationship::Or, None));
+        global_permissions.insert(Permission::Report, (Relationship::Or, None));
+        global_permissions.insert(Permission::Vote, (Relationship::Or, None));
+        global_permissions.insert(Permission::AddProposal(false), (Relationship::Or, None));
 
-        permissions.insert(Permission::AddProposal(true), (Relationship::And, None));
-        permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
-        permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
-        permissions.insert(Permission::SetRole(None), (Relationship::And, None));
-        permissions.insert(Permission::DelRole(None), (Relationship::And, None));
-        permissions.insert(Permission::AddMember(None), (Relationship::And, None));
-        permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
-        permissions.insert(Permission::Other(None), (Relationship::And, None));
+        global_permissions.insert(Permission::AddProposal(true), (Relationship::And, None));
+        global_permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
+        global_permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
+        global_permissions.insert(Permission::SetRole(None), (Relationship::And, None));
+        global_permissions.insert(Permission::DelRole(None), (Relationship::And, None));
+        global_permissions.insert(Permission::AddMember(None), (Relationship::And, None));
+        global_permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
+        global_permissions.insert(Permission::Other(None), (Relationship::And, None));
         let mut this = Self {
             roles: HashMap::new(),
-            global_role: permissions.clone()
+            global_role: global_permissions.clone()
         };
         this.roles.insert("ban".to_string(), Role { 
             alias: "Banned".to_string(),
@@ -104,15 +104,35 @@ impl RoleManagement {
             mod_level: 0,
             override_level: 99
         });
+        let mut mod_permissions = HashSet::new();
+        mod_permissions.insert(Permission::AddContent(0));
+        mod_permissions.insert(Permission::AddContent(1));
+        mod_permissions.insert(Permission::AddContent(2));
+        mod_permissions.insert(Permission::DelContent);
+        mod_permissions.insert(Permission::AddEncryptContent(0));
+        mod_permissions.insert(Permission::AddEncryptContent(1));
+        mod_permissions.insert(Permission::AddEncryptContent(2));
+        mod_permissions.insert(Permission::DelEncryptContent);
+        mod_permissions.insert(Permission::Like);
+        mod_permissions.insert(Permission::Unlike);
+        mod_permissions.insert(Permission::Report);
+        mod_permissions.insert(Permission::Vote);
+        mod_permissions.insert(Permission::AddProposal(false));
+        mod_permissions.insert(Permission::AddProposal(true));
+        mod_permissions.insert(Permission::ReportConfirm);
+        mod_permissions.insert(Permission::DelOthersContent);
+        mod_permissions.insert(Permission::SetRole(None));
+        mod_permissions.insert(Permission::DelRole(None));
+        mod_permissions.insert(Permission::AddMember(None));
+        mod_permissions.insert(Permission::RemoveMember(None));
+        mod_permissions.insert(Permission::Other(None));
         this.roles.insert("mod".to_string(), Role { 
             alias: "Mod".to_string(),
             members: "mod_member".to_string().into_bytes(), 
-            permissions:  HashSet::new(),
+            permissions:  mod_permissions,
             mod_level: 2,
             override_level: 0
         });
-        let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new("mod_member".to_string().into_bytes());
-        role_members.insert(&env::current_account_id(), &HashMap::new());
         this
     }
 }
@@ -208,8 +228,9 @@ impl Community {
         assert!(self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
+        let mod_level = self.get_user_mod_level(&sender_id);
         for (account_id, options) in members {
-            if !is_registered(&account_id) {
+            if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
                 continue
             }
             role_members.insert(&account_id, &options.unwrap_or(HashMap::new()));
@@ -223,7 +244,11 @@ impl Community {
         assert!(self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
+        let mod_level = self.get_user_mod_level(&sender_id);
         for account_id in members {
+            if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
+                continue
+            }
             role_members.remove(&account_id);
         }
         set_storage_usage(initial_storage_usage, None);
@@ -232,6 +257,7 @@ impl Community {
     pub fn set_members(&mut self, add: HashMap<String, Vec<AccountId>>, remove: HashMap<String, Vec<AccountId>>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
+        let mod_level = self.get_user_mod_level(&sender_id);
         for (hash, members) in add.iter() {
             if !self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))) {
                 continue
@@ -242,7 +268,7 @@ impl Community {
             };
             let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
             for account_id in members {
-                if !is_registered(&account_id) {
+                if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
                     continue
                 }
                 role_members.insert(&account_id, &HashMap::new());
@@ -259,7 +285,7 @@ impl Community {
             };
             let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
             for account_id in members {
-                if !is_registered(&account_id) {
+                if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
                     continue
                 }
                 role_members.remove(&account_id);
@@ -269,7 +295,7 @@ impl Community {
     }
 
     pub fn get_user_mod_level(&self, account_id: &AccountId) -> u32 {
-        if *account_id == self.owner_id {
+        if *account_id == self.owner_id || *account_id == env::current_account_id() {
             return u32::MAX
         }
         let mut max_override_level = 0;
@@ -319,11 +345,13 @@ impl Community {
         account_id: AccountId,
         permission: Permission
     ) -> bool {
+        
+        if account_id == self.owner_id || account_id == env::current_account_id() {
+            return true
+        }
+
         if !is_registered(&account_id) {
             return false
-        }
-        if account_id == self.owner_id {
-            return true
         }
 
         match self.check_global_allowed(&permission, &account_id) {
@@ -375,7 +403,7 @@ impl Community {
     }
 
     fn check_global_allowed(&self, permission: &Permission, account_id: &AccountId) -> Option<bool> {
-        if *account_id == self.owner_id {
+        if *account_id == self.owner_id || *account_id == env::current_account_id() {
             return Some(true)
         }
         let permissions = self.role_management.global_role.clone();
@@ -443,7 +471,7 @@ impl Community {
     }
 
     fn check_allowed(&self, permission: &Permission, permissions: &HashSet<Permission>, account_id: &AccountId) -> bool {
-        if *account_id == self.owner_id {
+        if *account_id == self.owner_id || *account_id == env::current_account_id() {
             return true
         }
         match permission {

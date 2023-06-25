@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref};
 
-use crate::*;
+use crate::{*, utils::set_account};
 use account::Account;
 use post::Hierarchy;
 use uint::construct_uint;
@@ -63,18 +63,18 @@ impl Drip {
                     let account_royalty = total_drip * royalty;
                     drip -= account_royalty;
                     let account_royalty = (account_royalty / U256::from(100 as u128)).as_u128();
-                    let mut account = self.accounts.get(&account_id).unwrap_or_default();
+                    let mut account = get_account(&account_id);
                     account.increase_drip(account_royalty);
-                    self.accounts.insert(&account_id, &account);
+                    set_account(&account_id, &account);
                     drip_items.push((account_id, key.clone() + ":royalty", account_royalty.into()));
                 }
             }
         }
         
-        let mut account = self.accounts.get(&account_id).unwrap_or_default();
+        let mut account = get_account(&account_id);
         let drip = (drip / U256::from(100 as u128)).as_u128();
         account.increase_drip(drip);
-        self.accounts.insert(&account_id, &account);
+        set_account(&account_id, &account);
         drip_items.push((account_id.clone(), key, drip.into()));
         drip_items
     }
@@ -105,10 +105,10 @@ impl Drip {
             }
         }
 
-        let mut account = self.accounts.get(&account_id).unwrap_or_default();
+        let mut account = get_account(&account_id);
         per = account.get_account_decay() * per / 100;
         account.increase_content_count();
-        self.accounts.insert(&account_id, &account);
+        set_account(&account_id, &account);
         
         let items = self.set_drip(key, None, &account_id, per); 
         [drip_items, items].concat()
@@ -170,19 +170,18 @@ impl Drip {
             return vec![]
         }
 
-        let mut from_account = self.accounts.get(&from).unwrap_or_default();
-        let mut to_account = self.accounts.get(&to).unwrap();
+        let mut from_account = get_account(&from);
+        let mut to_account = get_account(&to).registered();
         let amount = from_account.get_drip();
         from_account.decrease_drip(amount);
         self.accounts.insert(&from, &from_account);
         to_account.increase_drip(amount);
-        self.accounts.insert(&to, &to_account);
+        set_account(&to, &to_account);
         vec![(to, "gather".to_string(), amount.into())]
     }
 
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> U128 {
-        let mut account = self.accounts.get(&account_id).unwrap_or_default();
-        assert!(account.is_registered(), "not registered");
+        let mut account = get_account(&account_id).registered();
         let balance = account.get_drip();
         account.decrease_drip(balance);
         self.accounts.insert(&account_id, &account);
@@ -190,12 +189,12 @@ impl Drip {
     }
 
     pub fn get_drip(&self, account_id: AccountId) -> U128 {
-        let account = self.accounts.get(&account_id).unwrap_or_default();
+        let account = get_account(&account_id);
         account.get_drip().into()
     }
 
     pub fn get_account_decay(&self, account_id: AccountId) -> u32 {
-        let account = self.accounts.get(&account_id).unwrap_or_default();
+        let account = get_account(&account_id);
         account.get_account_decay()
     }
 

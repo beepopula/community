@@ -190,7 +190,7 @@ impl Community {
             Report::Disapprove => {},
             _ => {
                 for account_id in &accounts {
-                    let mut account = match self.accounts.get(account_id) {
+                    let mut account = match get_account(account_id).get_registered() {
                         Some(account) => account,
                         None => continue
                     };

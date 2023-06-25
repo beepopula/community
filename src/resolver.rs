@@ -2,11 +2,11 @@ use near_non_transferable_token::fungible_token::receiver::FungibleTokenReceiver
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as FtReceiver;
 
-use crate::*;
+use crate::{*, utils::set_account};
 use crate::account::AssetKey;
 use crate::drip::get_map_value;
 use crate::utils::get_parent_contract_id;
-use near_sdk::PromiseOrValue;
+use near_sdk::{PromiseOrValue, PromiseResult};
 
 #[derive(Serialize, Deserialize)]
 #[serde(crate = "near_sdk::serde")]
@@ -27,6 +27,31 @@ pub struct ReportInput {
 }
 
 #[near_bindgen]
+impl Community {
+
+    #[private]
+    pub fn on_withdraw_callback(&mut self, account_id: AccountId, asset: AssetKey, amount: U128) {
+        assert_eq!(
+            env::promise_results_count(),
+            1,
+            "unexpected promise count"
+        );
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Successful(_) => {
+                let mut account = get_account(&account_id).registered();
+                account.decrease_balance(asset, amount.0);
+                set_account(&account_id, &account);
+                PromiseOrValue::Value(())
+            },
+            PromiseResult::Failed => {
+                PromiseOrValue::Value(())
+            },
+        };
+    }
+}
+
+#[near_bindgen]
 impl FtReceiver for Community {
 
     fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
@@ -34,14 +59,14 @@ impl FtReceiver for Community {
         match msg_input {
             MsgInput::Deposit => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-                let mut account = accounts.get(&sender_id).unwrap_or_default();
+                let mut account = get_account(&sender_id);
                 account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
                 accounts.insert(&sender_id, &account);
                 PromiseOrValue::Value(0.into())
             },
             MsgInput::Donate => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-                let mut account = accounts.get(&env::current_account_id()).unwrap();
+                let mut account = get_account(&env::current_account_id()).registered();
                 account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
                 accounts.insert(&env::current_account_id(), &account);
                 PromiseOrValue::Value(0.into())
@@ -70,7 +95,7 @@ impl NtftReceiver for Community {
             },
             _ => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-                let mut account = accounts.get(&owner_id).unwrap_or_default();
+                let mut account = get_account(&owner_id);
                 account.increase_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
                 accounts.insert(&owner_id, &account);
                 PromiseOrValue::Value(0.into())
@@ -82,8 +107,8 @@ impl NtftReceiver for Community {
 
     fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-        let mut account = match accounts.get(&owner_id) {
-            Some(account) => account,
+        let mut account = match get_account(&owner_id).get_registered() {
+            Some(v) => v,
             None => return PromiseOrValue::Value(amount)
         };
 

@@ -6,19 +6,20 @@ use std::str::FromStr;
 use account::Account;
 // use near_fixed_bit_tree::BitTree;
 use events::Event;
+use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self, to_string};
-use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env};
+use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
 use proposal::Proposal;
 use role::{RoleManagement};
 use uint::hex;
-use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage};
+use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account};
 use crate::post::Hierarchy;
-use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig};
+use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, is_registered};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -172,7 +173,7 @@ impl Community {
         }
         
         let sender_id = env::predecessor_account_id();
-        let mut account = match self.accounts.get(&sender_id) {
+        let mut account = match get_account(&sender_id).get_registered() {
             Some(mut account)=> {
                 account.set_registered(true);
                 account
@@ -207,7 +208,7 @@ impl Community {
         }
         assert_one_yocto();
         let sender_id = env::predecessor_account_id();
-        let account = self.accounts.get(&sender_id);
+        let account = get_account(&sender_id).get_registered();
         if let Some(mut account) = account {
             account.set_registered(false);
             self.accounts.insert(&sender_id, &account);
@@ -218,25 +219,41 @@ impl Community {
     pub fn deposit(&mut self) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        let mut account = self.accounts.get(&sender_id).unwrap();
+        let mut account = get_account(&sender_id).registered();
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         self.accounts.insert(&sender_id, &account);
         set_storage_usage(initial_storage_usage, None);
     }
 
-    pub fn withdraw(&mut self, asset: AssetKey, amount: U128) {
+    pub fn withdraw(&mut self, asset: AssetKey, amount: U128) -> PromiseOrValue<()> {
         let sender_id = env::predecessor_account_id();
-        let mut account = self.accounts.get(&sender_id).unwrap_or_default();
-        account.decrease_balance(asset, amount.0);
-        self.accounts.insert(&sender_id, &account);
-        // Promise::new(sender_id).transfer(amount.0);
+        let account = get_account(&sender_id).registered();
+        assert!(account.get_balance(&asset).checked_sub(amount.0).is_some(), "not enough balance");
+        let result = match &asset {
+            AssetKey::FT(token_id) => {
+                if token_id.to_string() == "near" {
+                    Promise::new(sender_id.clone()).transfer(amount.0).into()
+                } else {
+                    ext_ft_core::ext(token_id.clone()).ft_transfer(sender_id.clone(), amount, None).into()
+                }
+            },
+            AssetKey::NFT(_, _) => PromiseOrValue::Value(()),
+            AssetKey::Drip(_) => PromiseOrValue::Value(())
+        };
+        match result {
+            PromiseOrValue::Promise(promise) => promise
+                .then(
+                    Self::ext(env::current_account_id()).on_withdraw_callback(sender_id, asset, amount)
+                ).into(),
+            PromiseOrValue::Value(()) => PromiseOrValue::Value(())
+        }
     }
 
     #[payable]
     pub fn collect_drip(&mut self) -> U128 {
         assert_one_yocto();
         let sender_id = env::signer_account_id();
-        assert!(self.accounts.get(&sender_id).is_some(), "account not found");
+        assert!(is_registered(&sender_id), "account not found");
         self.drip.get_and_clear_drip(sender_id)
     }
 
