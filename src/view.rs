@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Proposal, Opt, ExecutionStatus}};
 use near_sdk::Balance;
-use utils::get_content_hash;
+use utils::{get_content_hash, get_account as get_account_safe};
 use post::Hierarchy;
 use account::AssetKey;
 
@@ -48,7 +48,7 @@ impl Community {
     }
 
     pub fn get_account(&self, account_id: AccountId) -> Option<HashMap<String, String>> {
-        match self.accounts.get(&account_id) {
+        match get_account_safe(&account_id).get_registered() {
             Some(v) => Some(v.data),
             None => None
         }
@@ -93,7 +93,7 @@ impl Community {
     }
 
     pub fn get_balance(&self, account_id: AccountId, balance: AssetKey) -> U128{
-        match self.accounts.get(&account_id) {
+        match get_account_safe(&account_id).get_registered() {
             Some(account) => {
                 account.get_balance(&balance).into()
             },

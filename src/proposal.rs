@@ -196,6 +196,7 @@ impl Proposal {
         );
         let (vote, amount, index) = self.votes.get(account_id).unwrap();
         assert!(self.votes.get(&account_id).is_some(), "account not found");
+        assert!(amount.0 > 0, "already redeem");
         match &self.asset {
             Some(asset) => {
                 let mut account: Account = get_account(account_id).registered();
@@ -332,12 +333,12 @@ impl Community {
                 
             }
         }
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddProposal(have_action)), "not allowed");
+        assert!(self.can_execute_action(None, Permission::AddProposal(have_action)), "not allowed");
         // TODO
         // if have_action {
         //     assert!(proposal.until.0 - proposal.begin.0 > 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
         // }
-        let id_string= sender_id.to_string() + &json!(proposal).to_string() + &env::block_timestamp().to_string();
+        let id_string= sender_id.to_string() + &json!(proposal).to_string();
         let id = bs58::encode(env::sha256(id_string.as_bytes())).into_string();
         self.proposals.insert(&id, &proposal.into());
         let access_key = SecretKey::from_bytes(&env::sha256(id_string.as_bytes())).unwrap();
@@ -352,7 +353,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let mut proposal: Proposal = self.proposals.get(&id).unwrap().into();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::Vote), "not allowed");
+        assert!(self.can_execute_action(None, Permission::Vote), "not allowed");
         assert!(
             matches!(proposal.get_status(), ProposalStatus::InProgress),
             "Expired"
@@ -362,7 +363,7 @@ impl Community {
             vote,
             amount.0
         ); 
-        let drips = self.drip.set_proposal_drip(proposal.proposer.clone());
+        let drips = self.drip.set_proposal_drip(proposal.proposer.clone(), sender_id);
         self.proposals.insert(&id, &proposal);
         Event::log_other(
             Some(json!({
@@ -436,37 +437,42 @@ impl Community {
         result
     }
 
-    pub fn redeem_vote(&mut self, proposal_id: String) {
-        let mut proposal: Proposal = self.proposals.get(&proposal_id).unwrap().into();
-        let sender_id = env::predecessor_account_id();
-        proposal.redeem_vote(&sender_id);
-        self.proposals.insert(&proposal_id, &proposal);  
+    pub fn redeem_votes(&mut self, proposal_ids: Vec<String>) {
+        let mut drips = vec![];
+        for proposal_id in proposal_ids.iter() {
+            let mut proposal: Proposal = self.proposals.get(&proposal_id).unwrap().into();
+            let sender_id = env::predecessor_account_id();
+            proposal.redeem_vote(&sender_id);
+            self.proposals.insert(&proposal_id, &proposal);  
 
-        let voter = proposal.votes.get(&sender_id).unwrap();
-        let drips = match proposal.get_status() {
-            ProposalStatus::Expired => self.drip.set_vote_drip(sender_id, 100),
-            ProposalStatus::Result(option) => {
-                if option == voter.0 {       //bonus
-                    let base_drip = U128::from(get_map_value(&"vote".to_string())).0;
-                    let total_drips = proposal.votes.len() as u128 * base_drip;
-                    let opt = proposal.options.get(option as usize).unwrap();
-                    let option_drips = opt.accounts.0 as u128 * base_drip;
-                    let rest_drips = total_drips - option_drips;
-                    let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
-                    let index = voter.2.0;
-                    let mut amount_per_account = base_drip;
-                    if index <= index_threshold {
-                        amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
+            let voter = proposal.votes.get(&sender_id).unwrap();
+
+            drips.extend(match proposal.get_status() {
+                ProposalStatus::Expired => self.drip.set_vote_drip(sender_id, 100),
+                ProposalStatus::Result(option) => {
+                    if option == voter.0 {       //bonus
+                        let base_drip = U128::from(get_map_value(&"vote".to_string())).0;
+                        let total_drips = proposal.votes.len() as u128 * base_drip;
+                        let opt = proposal.options.get(option as usize).unwrap();
+                        let option_drips = opt.accounts.0 as u128 * base_drip;
+                        let rest_drips = total_drips - option_drips;
+                        let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
+                        let index = voter.2.0;
+                        let mut amount_per_account = base_drip;
+                        if index <= index_threshold {
+                            amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
+                        } else {
+                            amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
+                        }
+                        self.drip.set_vote_drip(sender_id, (amount_per_account * 100 / base_drip) as u32)
                     } else {
-                        amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
+                        vec![]
                     }
-                    self.drip.set_vote_drip(sender_id, (amount_per_account * 100 / base_drip) as u32)
-                } else {
-                    vec![]
-                }
-            },
-            _ => panic!("in progress")
-        };
+                },
+                _ => continue
+            });
+        }
+        
         if drips.len() > 0 {
             Event::log_other(
                 Some(json!({
@@ -592,6 +598,23 @@ mod tests {
             execution_status: proposal.execution_status
         };
         println!("{:?}", output);
+    }
+
+    #[test]
+    pub fn test_cal() {
+        let base_drip = 200000000000000000000000;
+        let total_drips = 100 as u128 * base_drip;
+        let opt = proposal.options.get(option as usize).unwrap();
+        let option_drips = opt.accounts.0 as u128 * base_drip;
+        let rest_drips = total_drips - option_drips;
+        let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
+        let index = voter.2.0;
+        let mut amount_per_account = base_drip;
+        if index <= index_threshold {
+            amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
+        } else {
+            amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
+        }
     }
 
 }

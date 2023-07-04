@@ -144,7 +144,7 @@ impl Community {
     pub fn set_global_role(&mut self, permissions: Vec<Permission>, options: Vec<(Relationship, Option<Access>)>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(None)), "not allowed");
+        assert!(self.can_execute_action(None, Permission::SetRole(None)), "not allowed");
         for i in 0..permissions.len() {
             self.role_management.global_role.insert(permissions[i].clone(), options[i].clone());
         }
@@ -154,7 +154,7 @@ impl Community {
     pub fn add_role(&mut self, alias: String, permissions: Vec<Permission>, mod_level: u32, override_level: u32) -> String {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(None)), "not allowed");
+        assert!(self.can_execute_action(None, Permission::SetRole(None)), "not allowed");
         let hash = bs58::encode(env::sha256((alias.clone() + &env::block_timestamp().to_string()).as_bytes())).into_string();
         let mut role = match self.role_management.roles.get(&hash) {
             Some(v) => panic!("role already exist"),
@@ -183,7 +183,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
         let hash = String::from(&hash);
-        assert!(self.can_execute_action(sender_id.clone(), Permission::SetRole(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, Permission::SetRole(Some(hash.clone()))), "not allowed");
         let mut role = match self.role_management.roles.get(&hash) {
             Some(v) => v.clone(),
             None => panic!("role not exist")
@@ -216,7 +216,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         Base58CryptoHash::try_from(hash.clone()).unwrap();    //exclude "all" and "ban"
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::DelRole(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, Permission::DelRole(Some(hash.clone()))), "not allowed");
         self.role_management.roles.remove(&hash);
         set_storage_usage(initial_storage_usage, None);
     }
@@ -225,7 +225,7 @@ impl Community {
     pub fn add_member_to_role(&mut self, hash: String, members: Vec<(AccountId, Option<HashMap<String, String>>)>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, Permission::AddMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
         let mod_level = self.get_user_mod_level(&sender_id);
@@ -241,7 +241,7 @@ impl Community {
     pub fn remove_member_from_role(&mut self, hash: String, members: Vec<AccountId>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, Permission::RemoveMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
         let mod_level = self.get_user_mod_level(&sender_id);
@@ -259,7 +259,7 @@ impl Community {
         let sender_id = env::predecessor_account_id();
         let mod_level = self.get_user_mod_level(&sender_id);
         for (hash, members) in add.iter() {
-            if !self.can_execute_action(sender_id.clone(), Permission::AddMember(Some(hash.clone()))) {
+            if !self.can_execute_action(None, Permission::AddMember(Some(hash.clone()))) {
                 continue
             }
             let role = match self.role_management.roles.get(hash) {
@@ -276,7 +276,7 @@ impl Community {
         }
 
         for (hash, members) in remove.iter() {
-            if !self.can_execute_action(sender_id.clone(), Permission::RemoveMember(Some(hash.clone()))) {
+            if !self.can_execute_action(None, Permission::RemoveMember(Some(hash.clone()))) {
                 continue
             }
             let role = match self.role_management.roles.get(hash) {
@@ -342,10 +342,13 @@ impl Community {
     /// Returns all roles that allow this action.
     pub fn can_execute_action(
         &self,
-        account_id: AccountId,
+        account_id: Option<AccountId>,
         permission: Permission
     ) -> bool {
-        
+        let account_id = match account_id {
+            Some(v) => v,
+            None => env::signer_account_id()
+        };
         if account_id == self.owner_id || account_id == env::current_account_id() {
             return true
         }

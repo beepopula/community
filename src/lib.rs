@@ -83,7 +83,7 @@ pub enum StorageKey {
 #[derive(BorshDeserialize, BorshSerialize, BorshStorageKey)]
 pub enum AccessLimit {
     Free,
-    Registy,
+    Registry,
     TokenLimit(Access)
 }
 
@@ -111,7 +111,7 @@ impl Community {
             drip: Drip::new(),
             role_management: RoleManagement::new(),
             proposals: UnorderedMap::new(StorageKey::Proposals),
-            access: AccessLimit::Registy
+            access: AccessLimit::Registry
         };
         let mut account = this.accounts.get(&owner_id).unwrap_or_default();
         account.set_registered(true);
@@ -225,7 +225,9 @@ impl Community {
         set_storage_usage(initial_storage_usage, None);
     }
 
+    #[payable]
     pub fn withdraw(&mut self, asset: AssetKey, amount: U128) -> PromiseOrValue<()> {
+        assert_one_yocto();
         let sender_id = env::predecessor_account_id();
         let account = get_account(&sender_id).registered();
         assert!(account.get_balance(&asset).checked_sub(amount.0).is_some(), "not enough balance");
@@ -234,7 +236,7 @@ impl Community {
                 if token_id.to_string() == "near" {
                     Promise::new(sender_id.clone()).transfer(amount.0).into()
                 } else {
-                    ext_ft_core::ext(token_id.clone()).ft_transfer(sender_id.clone(), amount, None).into()
+                    ext_ft_core::ext(token_id.clone()).with_attached_deposit(1).ft_transfer(sender_id.clone(), amount, None).into()
                 }
             },
             AssetKey::NFT(_, _) => PromiseOrValue::Value(()),

@@ -160,7 +160,10 @@ impl Drip {
         self.set_drip(key, None, &voter_id, per)
     }
 
-    pub fn set_proposal_drip(&mut self, proposer_id: AccountId) -> Vec<(AccountId, String, U128)> {
+    pub fn set_proposal_drip(&mut self, proposer_id: AccountId, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
+        if proposer_id == account_id {
+            return vec![]
+        }
         let key = "be_voted".to_string();
         self.set_drip(key, None, &proposer_id, 100)
     }

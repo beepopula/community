@@ -67,9 +67,9 @@ impl Community {
         } 
 
         if check_encryption_content_permission {
-            assert!(self.can_execute_action(sender_id.clone(), Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
+            assert!(self.can_execute_action(None, Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
         } else {
-            assert!(self.can_execute_action(sender_id.clone(), Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+            assert!(self.can_execute_action(None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
         }
 
         assert!(hierarchies.len() < MAX_LEVEL, "error");
@@ -108,7 +108,7 @@ impl Community {
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::Like), "not allowed");
+        assert!(self.can_execute_action(None, Permission::Like), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
         let exist = check_and_set(&hash, 0);
@@ -128,7 +128,7 @@ impl Community {
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::Unlike), "not allowed");
+        assert!(self.can_execute_action(None, Permission::Unlike), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
 
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
@@ -140,7 +140,7 @@ impl Community {
     pub fn del_content(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::DelContent), "not allowed");
+        assert!(self.can_execute_action(None, Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
         let hierarchy_hash = match get_content_hash(hierarchies.clone(), None, false) {
@@ -157,7 +157,7 @@ impl Community {
     pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, report: Report) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::ReportConfirm), "not allowed");
+        assert!(self.can_execute_action(None, Permission::ReportConfirm), "not allowed");
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id) || sender_id == self.owner_id, "not allowed");
@@ -205,7 +205,7 @@ impl Community {
     pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = env::predecessor_account_id();
-        assert!(self.can_execute_action(sender_id.clone(), Permission::DelOthersContent), "not allowed");
+        assert!(self.can_execute_action(None, Permission::DelOthersContent), "not allowed");
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         assert!(self.get_user_mod_level(&hierarchy.account_id) < self.get_user_mod_level(&sender_id), "not allowed");
@@ -232,7 +232,7 @@ pub extern "C" fn add_long_content() {
     let options = args.options.clone();
     let sender_id = env::predecessor_account_id();
     let mut contract: Community = env::state_read().unwrap();
-    assert!(contract.can_execute_action(sender_id.clone(), Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+    assert!(contract.can_execute_action(None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
 
     assert!(hierarchies.len() < MAX_LEVEL, "error");
 
