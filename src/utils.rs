@@ -186,6 +186,9 @@ pub(crate) fn set_storage_usage(initial_storage_usage: u64, account_id: Option<A
         Some(account_id) => account_id,
         None => env::signer_account_id()
     };
+    if account_id == env::current_account_id() {
+        return
+    }
     let mut account = get_account(&account_id).registered();
     let balance = AssetKey::FT(AccountId::from_str("near").unwrap());
     let current_storage_usage = env::storage_usage();

@@ -1,6 +1,6 @@
 cd out
-w=$(basename -- ./normal.wasm)
-p=./normal.wasm 
+w=$(basename -- ./main.wasm)
+p=./main.wasm 
 echo "Minifying $w, make sure it is not stripped"
 wasm-snip $p --snip-rust-fmt-code --snip-rust-panicking-code -p core::num::flt2dec::.* -p core::fmt::float::.*  \
     --output temp-$w

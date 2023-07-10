@@ -4,7 +4,6 @@ use std::convert::TryInto;
 use std::str::FromStr;
 
 use account::Account;
-// use near_fixed_bit_tree::BitTree;
 use events::Event;
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
@@ -18,7 +17,9 @@ use proposal::Proposal;
 use role::{RoleManagement};
 use uint::hex;
 use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account, set_account};
+use crate::access::Relationship;
 use crate::post::Hierarchy;
+use crate::role::Role;
 use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, is_registered};
 use std::convert::TryFrom;
 use role::Permission;
@@ -61,6 +62,8 @@ pub struct OldCommunity {
     owner_id: AccountId,
     args: HashMap<String, String>,
     accounts: LookupMap<AccountId, Account>,
+    // content_tree: BitTree,
+    // relationship_tree: BitTree,
     reports: UnorderedMap<Base58CryptoHash, HashSet<AccountId>>,
     drip: Drip,
     role_management: RoleManagement,
@@ -105,8 +108,6 @@ impl Community {
             owner_id: owner_id.clone(),
             args,
             accounts: LookupMap::new(StorageKey::Account),
-            // content_tree: BitTree::new(28, vec![0], u16::BITS as u8),
-            // relationship_tree: BitTree::new(28, vec![1], 0),
             reports: UnorderedMap::new(StorageKey::Report),
             drip: Drip::new(),
             role_management: RoleManagement::new(),
@@ -125,23 +126,44 @@ impl Community {
 
     #[init(ignore_state)]
     pub fn migrate() -> Self {
-        let prev: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
-        assert!(env::predecessor_account_id() == prev.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
+        let mut this: Community = env::state_read().expect("ERR_NOT_INITIALIZED");
+        assert!(env::predecessor_account_id() == this.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
         
-        let mut this = Community {
-            owner_id: prev.owner_id,
-            args: prev.args,
-            accounts: prev.accounts,
-            reports: prev.reports,
-            drip: prev.drip,
-            role_management: prev.role_management,
-            proposals: UnorderedMap::new(StorageKey::Proposals),
-            access: prev.access
-        };
         let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
         account.set_registered(true);
-        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), u128::MAX);
         this.accounts.insert(&env::current_account_id(), &account);
+        let mut mod_permissions = HashSet::new();
+        mod_permissions.insert(Permission::AddContent(0));
+        mod_permissions.insert(Permission::AddContent(1));
+        mod_permissions.insert(Permission::AddContent(2));
+        mod_permissions.insert(Permission::DelContent);
+        mod_permissions.insert(Permission::AddEncryptContent(0));
+        mod_permissions.insert(Permission::AddEncryptContent(1));
+        mod_permissions.insert(Permission::AddEncryptContent(2));
+        mod_permissions.insert(Permission::DelEncryptContent);
+        mod_permissions.insert(Permission::Like);
+        mod_permissions.insert(Permission::Unlike);
+        mod_permissions.insert(Permission::Report);
+        mod_permissions.insert(Permission::Vote);
+        mod_permissions.insert(Permission::AddProposal(false));
+        mod_permissions.insert(Permission::AddProposal(true));
+        mod_permissions.insert(Permission::ReportConfirm);
+        mod_permissions.insert(Permission::DelOthersContent);
+        mod_permissions.insert(Permission::SetRole(None));
+        mod_permissions.insert(Permission::DelRole(None));
+        mod_permissions.insert(Permission::AddMember(None));
+        mod_permissions.insert(Permission::RemoveMember(None));
+        mod_permissions.insert(Permission::Other(None));
+        this.role_management.roles.insert("mod".to_string(), Role { 
+            alias: "Mod".to_string(),
+            members: "mod_member".to_string().into_bytes(), 
+            permissions:  mod_permissions,
+            mod_level: 2,
+            override_level: 0
+        });
+        this.role_management.global_role.insert(Permission::Vote, (Relationship::Or, None));
+        this.role_management.global_role.insert(Permission::AddProposal(false), (Relationship::Or, None));
+        this.role_management.global_role.insert(Permission::AddProposal(true), (Relationship::And, None));
         env::state_write::<Community>(&this);
         this
     }
@@ -312,14 +334,14 @@ mod tests {
 
     #[test]
     pub fn test() {
-        let state = base64::decode("DAAAAGZpbG8udGVzdG5ldAIAAAANAAAAZHJpcF9jb250cmFjdBYAAABkcmlwLmJlZXBvcHVsYS50ZXN0bmV0CgAAAHB1YmxpY19rZXksAAAARllMVjV6dFNlMkZqblJUQ0JIZ0UxSFVvQWlvSHVRQmF2Y0VLU2g3b0RxOWQBAAAAAQIAAAAAaQIAAAAAAAAAAgAAAABrAgAAAAAAAAACAAAAAHYBAAAAAQQAAAAsAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb20IAAAAQ3VyYXRvcnMzAAAAN1gxWFp2emdkRjI4V2Rib1F0N1FIc1VBMWVTOWRFTVd6dnk4YktMeGNlb21fbWVtYmVyBAAAAAQFBgcAAAAAAAAAACwAAABCazhGWUhXcWJ2aEdERndGdGNDWFduVDRMcGFwY3l3TjFLZXQ0aWdvSlJIZgYAAABBZG1pbnMzAAAAQms4RllIV3FidmhHREZ3RnRjQ1hXblQ0THBhcGN5d04xS2V0NGlnb0pSSGZfbWVtYmVyCgAAAAQFBgcICQwBAwAAAGJhbg0BAwAAAGJhbg4BCQAAAE1hbmFnZVBpbg4BCwAAAE1hbmFnZVJ1bGVzAQAAAAAAAAAsAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2EdAAAATkZUIFBhcmlzIE1hcmtldGluZyBDb21taXR0ZWUzAAAAR2dXYlZ1WUp2ZXRvZm5vWHdBQVh1SmdVREIxUHAycTZEVjZNVFRCNUxoM2FfbWVtYmVyBAAAAAQFBgcAAAAAAAAAAAMAAABiYW4GAAAAQmFubmVkCgAAAGJhbl9tZW1iZXIAAAAAAAAAAGMAAAATAAAAAAAAAQEAAAACFgAAAGRyaXAuYmVlcG9wdWxhLnRlc3RuZXQrAAAAcmVuZ2F1bm9mZmljaWFsLmNvbW11bml0eS5iZWVwb3B1bGEudGVzdG5ldAAAAKHtzM4bwtMAAAAAAAAAAAEAAAACAAABAAACAAABAQAAAAIWAAAAZHJpcC5iZWVwb3B1bGEudGVzdG5ldCsAAAByZW5nYXVub2ZmaWNpYWwuY29tbXVuaXR5LmJlZXBvcHVsYS50ZXN0bmV0AAAAoe3MzhvC0wAAAAAAAAACAQAAAgIAAAMAAAQAAAUAAAYAAAcAAAgBAAkBAAoAAQALAAEADAABAA0AAQAOAAEAAQ==").unwrap();
+        let state = base64::decode("EAAAAHBhdmVsZ29kLnRlc3RuZXQBAAAADQAAAGRyaXBfY29udHJhY3QZAAAAdjItZHJpcC5iZWVwb3B1bGEudGVzdG5ldAEAAAABAgAAAABpAAAAAAAAAAACAAAAAGsAAAAAAAAAAAIAAAAAdgEAAAABAgAAAAMAAABiYW4GAAAAQmFubmVkCgAAAGJhbl9tZW1iZXIAAAAAAAAAAGMAAAADAAAAbW9kAwAAAE1vZAoAAABtb2RfbWVtYmVyFQAAAAAAAAEAAgECAAIBAgIDBAUHCAkKAAsADAANAA4ADwAPARACAAAAAAAAABUAAAAAAAAAAAEAAAACAAABAAACAAAAAgEAAAICAAADAAAEAAAFAAAHAAAIAQAJAQAKAAEACwABAAwAAQANAAEADgABAA8AAAAPAQEAEAAAAgAAAANpAAAAAAAAAAACAAAAA2sAAAAAAAAAAAIAAAADdgE=").unwrap();
         let state = OldCommunity::try_from_slice(&state).unwrap();
-        let mut map = HashMap::new();
-        map.insert("drip_contract".to_string(), "v2-drip.beepopula.testnet".to_string());
-        let community = Community::new(AccountId::from_str("filo.testnet").unwrap(), map);
-        let text = community.try_to_vec().unwrap();
-        let text = base64::encode(text);
-        println!("{:?}", text);
+        // let mut map = HashMap::new();
+        // map.insert("drip_contract".to_string(), "v2-drip.beepopula.testnet".to_string());
+        // let community = Community::new(AccountId::from_str("filo.testnet").unwrap(), map);
+        // let text = community.try_to_vec().unwrap();
+        // let text = base64::encode(text);
+        println!("{:?}", state.args);
     }
 
     #[test]
