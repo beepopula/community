@@ -17,7 +17,7 @@ use drip::{Drip};
 use proposal::Proposal;
 use role::{RoleManagement};
 use uint::hex;
-use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account};
+use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account, set_account};
 use crate::post::Hierarchy;
 use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, is_registered};
 use std::convert::TryFrom;
@@ -119,7 +119,6 @@ impl Community {
         this.accounts.insert(&owner_id, &account);
         let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
         account.set_registered(true);
-        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), u128::MAX);
         this.accounts.insert(&env::current_account_id(), &account);
         this
     }
@@ -227,7 +226,6 @@ impl Community {
 
     #[payable]
     pub fn withdraw(&mut self, asset: AssetKey, amount: U128) -> PromiseOrValue<()> {
-        assert_one_yocto();
         let sender_id = env::predecessor_account_id();
         let account = get_account(&sender_id).registered();
         assert!(account.get_balance(&asset).checked_sub(amount.0).is_some(), "not enough balance");
@@ -249,6 +247,13 @@ impl Community {
                 ).into(),
             PromiseOrValue::Value(()) => PromiseOrValue::Value(())
         }
+    }
+
+    #[payable]
+    pub fn donate(&mut self) {
+        let mut account = get_account(&env::current_account_id()).registered();
+        account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+        set_account(&env::current_account_id(), &account);
     }
 
     #[payable]

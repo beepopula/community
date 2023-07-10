@@ -58,17 +58,15 @@ impl FtReceiver for Community {
         let msg_input = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Deposit => {
-                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = get_account(&sender_id);
                 account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
-                accounts.insert(&sender_id, &account);
+                set_account(&sender_id, &account);
                 PromiseOrValue::Value(0.into())
             },
             MsgInput::Donate => {
-                let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = get_account(&env::current_account_id()).registered();
                 account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
-                accounts.insert(&env::current_account_id(), &account);
+                set_account(&env::current_account_id(), &account);
                 PromiseOrValue::Value(0.into())
             },
             _ => {PromiseOrValue::Value(amount)}
@@ -106,27 +104,28 @@ impl NtftReceiver for Community {
     }
 
     fn ft_on_withdraw(&mut self, owner_id: AccountId, contract_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128>  {
-        let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
         let mut account = match get_account(&owner_id).get_registered() {
             Some(v) => v,
             None => return PromiseOrValue::Value(amount)
         };
 
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
-        match msg_input {
+        let promise = match msg_input {
             MsgInput::RevokeReport(report_input) => {
                 assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_deposit".to_string());
                 assert!(amount.0 > need_amount, "not enough amount");
-                self.internal_revoke_report(owner_id, report_input.hierarchies);
+                self.internal_revoke_report(owner_id.clone(), report_input.hierarchies);
                 PromiseOrValue::Value((amount.0 - need_amount).into())
             },
             _ => {
                 account.decrease_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
                 PromiseOrValue::Value(0.into())
             }
-        }
+        };
+        set_account(&owner_id, &account);
+        promise
     }
 
 

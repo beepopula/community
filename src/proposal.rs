@@ -181,8 +181,9 @@ impl Proposal {
             _ => amount
         };
         let mut option = self.options.get_mut(vote as usize).unwrap();
-        let index = option.accounts.0 + 1;
+        let index = option.accounts.0;
         self.votes.insert(&account_id, &(vote.clone(), amount.into(), index.into()));
+        let index = option.accounts.0 + 1;
         option.vote_count = (option.vote_count.0 + amount).into();
         option.accounts = (option.accounts.0 + 1).into();
         
@@ -334,10 +335,10 @@ impl Community {
             }
         }
         assert!(self.can_execute_action(None, Permission::AddProposal(have_action)), "not allowed");
-        // TODO
-        // if have_action {
-        //     assert!(proposal.until.0 - proposal.begin.0 > 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
-        // }
+
+        if have_action {
+            assert!(proposal.until.0 - proposal.begin.0 > 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
+        }
         let id_string= sender_id.to_string() + &json!(proposal).to_string();
         let id = bs58::encode(env::sha256(id_string.as_bytes())).into_string();
         self.proposals.insert(&id, &proposal.into());
@@ -456,15 +457,15 @@ impl Community {
                         let opt = proposal.options.get(option as usize).unwrap();
                         let option_drips = opt.accounts.0 as u128 * base_drip;
                         let rest_drips = total_drips - option_drips;
-                        let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
+                        let index_threshold = opt.accounts.0 * 2 / 10 + 1;     //only 20%
                         let index = voter.2.0;
                         let mut amount_per_account = base_drip;
-                        if index <= index_threshold {
+                        if index < index_threshold {
                             amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
                         } else {
                             amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
                         }
-                        self.drip.set_vote_drip(sender_id, (amount_per_account * 100 / base_drip) as u32)
+                        self.drip.set_vote_drip(sender_id,amount_per_account)
                     } else {
                         vec![]
                     }
@@ -600,21 +601,21 @@ mod tests {
         println!("{:?}", output);
     }
 
-    #[test]
-    pub fn test_cal() {
-        let base_drip = 200000000000000000000000;
-        let total_drips = 100 as u128 * base_drip;
-        let opt = proposal.options.get(option as usize).unwrap();
-        let option_drips = opt.accounts.0 as u128 * base_drip;
-        let rest_drips = total_drips - option_drips;
-        let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
-        let index = voter.2.0;
-        let mut amount_per_account = base_drip;
-        if index <= index_threshold {
-            amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
-        } else {
-            amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
-        }
-    }
+    // #[test]
+    // pub fn test_cal() {
+    //     let base_drip = 200000000000000000000000;
+    //     let total_drips = 100 as u128 * base_drip;
+    //     let opt = proposal.options.get(option as usize).unwrap();
+    //     let option_drips = opt.accounts.0 as u128 * base_drip;
+    //     let rest_drips = total_drips - option_drips;
+    //     let index_threshold = opt.accounts.0 * 2 / 10;     //only 20%
+    //     let index = voter.2.0;
+    //     let mut amount_per_account = base_drip;
+    //     if index <= index_threshold {
+    //         amount_per_account += rest_drips * 8 / 10 / (index_threshold as u128);
+    //     } else {
+    //         amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
+    //     }
+    // }
 
 }

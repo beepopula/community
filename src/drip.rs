@@ -78,6 +78,16 @@ impl Drip {
         drip_items.push((account_id.clone(), key, drip.into()));
         drip_items
     }
+
+    fn set_custom_drip(&mut self, key: String, account_id: &AccountId, amount: u128) -> Vec<(AccountId, String, U128)> {
+        let mut account = get_account(&account_id);
+        let drip = amount;
+        account.increase_drip(drip);
+        set_account(&account_id, &account);
+        let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
+        drip_items.push((account_id.clone(), key, drip.into()));
+        drip_items
+    }
     
 
     pub fn set_content_drip(&mut self, hierarchies: Vec<Hierarchy>, account_id: AccountId, prev_content_count: Option<u8>) -> Vec<(AccountId, String, U128)> {
@@ -155,9 +165,9 @@ impl Drip {
         self.set_drip(key, None, &inviter_id, 100)
     }
 
-    pub fn set_vote_drip(&mut self, voter_id: AccountId, per: u32) -> Vec<(AccountId, String, U128)> {
+    pub fn set_vote_drip(&mut self, voter_id: AccountId, amount: u128) -> Vec<(AccountId, String, U128)> {
         let key = "vote".to_string();
-        self.set_drip(key, None, &voter_id, per)
+        self.set_custom_drip(key, &voter_id, amount)
     }
 
     pub fn set_proposal_drip(&mut self, proposer_id: AccountId, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
