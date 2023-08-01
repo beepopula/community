@@ -35,18 +35,18 @@ pub enum ExecutionStatus {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Clone, Debug))]
 #[serde(crate = "near_sdk::serde")]
 pub struct ActionCall {
-    method_name: String,
-    args: String,
-    deposit: U128,
-    gas: U64,
+    pub method_name: String,
+    pub args: String,
+    pub deposit: U128,
+    pub gas: U64,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Clone, Debug))]
 #[serde(crate = "near_sdk::serde")]
 pub struct FunctionCall {
-    receiver_id: AccountId,
-    actions: Vec<ActionCall>
+    pub receiver_id: AccountId,
+    pub actions: Vec<ActionCall>
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
@@ -127,7 +127,7 @@ impl From<ProposalInput> for Proposal {
             quorum: input.quorum,
             threshold: input.threshold,
 
-            proposer: env::predecessor_account_id(),
+            proposer: get_predecessor_id(),
             votes: UnorderedMap::new(id.as_bytes()),
             execution_status: ExecutionStatus::NotStart
         }
@@ -314,8 +314,9 @@ impl Proposal {
 impl Community {
     /// Add proposal to this DAO.
     pub fn add_proposal(&mut self, proposal: ProposalInput) -> String {
+        init_callback();
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let mut have_action = false;
         for option in proposal.options.iter() {
             if !option.0.is_empty() {
@@ -351,9 +352,10 @@ impl Community {
     }
 
     pub fn vote(&mut self, id: String, vote: u32, amount: U128) {
+        init_callback();
         let initial_storage_usage = env::storage_usage();
         let mut proposal: Proposal = self.proposals.get(&id).unwrap().into();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::Vote), "not allowed");
         assert!(
             matches!(proposal.get_status(), ProposalStatus::InProgress),
@@ -442,17 +444,16 @@ impl Community {
         let mut drips = vec![];
         for proposal_id in proposal_ids.iter() {
             let mut proposal: Proposal = self.proposals.get(&proposal_id).unwrap().into();
-            let sender_id = env::predecessor_account_id();
+            let sender_id = get_predecessor_id();
             proposal.redeem_vote(&sender_id);
             self.proposals.insert(&proposal_id, &proposal);  
 
             let voter = proposal.votes.get(&sender_id).unwrap();
-
+            let base_drip = U128::from(get_map_value(&"vote".to_string())).0;
             drips.extend(match proposal.get_status() {
-                ProposalStatus::Expired => self.drip.set_vote_drip(sender_id, 100),
+                ProposalStatus::Expired => self.drip.set_vote_drip(sender_id, base_drip),
                 ProposalStatus::Result(option) => {
                     if option == voter.0 {       //bonus
-                        let base_drip = U128::from(get_map_value(&"vote".to_string())).0;
                         let total_drips = proposal.votes.len() as u128 * base_drip;
                         let opt = proposal.options.get(option as usize).unwrap();
                         let option_drips = opt.accounts.0 as u128 * base_drip;
@@ -465,7 +466,7 @@ impl Community {
                         } else {
                             amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
                         }
-                        self.drip.set_vote_drip(sender_id,amount_per_account)
+                        self.drip.set_vote_drip(sender_id, amount_per_account)
                     } else {
                         vec![]
                     }

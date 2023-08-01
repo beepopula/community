@@ -2,7 +2,7 @@ use std::{convert::TryInto, str::FromStr};
 
 use near_sdk::CryptoHash;
 
-use crate::{*, utils::{get, check_and_set, check}, drip::get_map_value};    
+use crate::{*, utils::{get, check_and_set, check, init_callback}, drip::get_map_value};    
 use utils::{get_content_hash, set_content};
 
 // #[derive(Serialize, Deserialize)]
@@ -57,8 +57,9 @@ impl Community {
 
     pub fn add_content(&mut self, args: String, hierarchies: Vec<Hierarchy>, options: Option<HashMap<String, String>>) -> Base58CryptoHash {
         // TODO: avoid hash collision through a loop
+        init_callback();
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let mut check_encryption_content_permission = false;
         if let Some(options) = options.clone() {
             if options.contains_key("access") {
@@ -106,8 +107,9 @@ impl Community {
     }
 
     pub fn like(&mut self, hierarchies: Vec<Hierarchy>) {
+        init_callback();
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::Like), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
         let hash = env::sha256(&(sender_id.to_string() + "like" + &hierarchy_hash.to_string()).into_bytes());
@@ -127,7 +129,7 @@ impl Community {
 
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::Unlike), "not allowed");
         let hierarchy_hash = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
 
@@ -139,7 +141,7 @@ impl Community {
 
     pub fn del_content(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::DelContent), "not allowed");
         assert!(hierarchies.get(hierarchies.len() - 1).unwrap().account_id == sender_id, "not content owner");
 
@@ -156,7 +158,7 @@ impl Community {
 
     pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, report: Report) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::ReportConfirm), "not allowed");
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
@@ -204,7 +206,7 @@ impl Community {
 
     pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::DelOthersContent), "not allowed");
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
@@ -230,7 +232,7 @@ pub extern "C" fn add_long_content() {
     let args: InputArgs = serde_json::from_slice(&raw_input[4..(args_length as usize + 4)]).unwrap();
     let hierarchies = args.hierarchies.clone();
     let options = args.options.clone();
-    let sender_id = env::predecessor_account_id();
+    let sender_id = get_predecessor_id();
     let mut contract: Community = env::state_read().unwrap();
     assert!(contract.can_execute_action(None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
 

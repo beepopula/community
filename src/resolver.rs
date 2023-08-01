@@ -59,13 +59,13 @@ impl FtReceiver for Community {
         match msg_input {
             MsgInput::Deposit => {
                 let mut account = get_account(&sender_id);
-                account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
+                account.increase_balance(AssetKey::FT(get_predecessor_id()), amount.0);
                 set_account(&sender_id, &account);
                 PromiseOrValue::Value(0.into())
             },
             MsgInput::Donate => {
                 let mut account = get_account(&env::current_account_id()).registered();
-                account.increase_balance(AssetKey::FT(env::predecessor_account_id()), amount.0);
+                account.increase_balance(AssetKey::FT(get_predecessor_id()), amount.0);
                 set_account(&env::current_account_id(), &account);
                 PromiseOrValue::Value(0.into())
             },
@@ -84,7 +84,7 @@ impl NtftReceiver for Community {
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
             MsgInput::Report(report_input) => {
-                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
+                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == get_predecessor_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_deposit".to_string());
                 assert!(amount.0 >= need_amount, "not enough drip");
@@ -94,7 +94,7 @@ impl NtftReceiver for Community {
             _ => {
                 let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
                 let mut account = get_account(&owner_id);
-                account.increase_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+                account.increase_balance(AssetKey::Drip((Some(get_predecessor_id()), contract_id.clone())), amount.0);
                 accounts.insert(&owner_id, &account);
                 PromiseOrValue::Value(0.into())
             }
@@ -112,7 +112,7 @@ impl NtftReceiver for Community {
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         let promise = match msg_input {
             MsgInput::RevokeReport(report_input) => {
-                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == env::predecessor_account_id(), "wrong token id");
+                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == get_predecessor_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
                 let need_amount = get_map_value(&"report_deposit".to_string());
                 assert!(amount.0 > need_amount, "not enough amount");
@@ -120,7 +120,7 @@ impl NtftReceiver for Community {
                 PromiseOrValue::Value((amount.0 - need_amount).into())
             },
             _ => {
-                account.decrease_balance(AssetKey::Drip((Some(env::predecessor_account_id()), contract_id.clone())), amount.0);
+                account.decrease_balance(AssetKey::Drip((Some(get_predecessor_id()), contract_id.clone())), amount.0);
                 PromiseOrValue::Value(0.into())
             }
         };

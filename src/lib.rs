@@ -9,18 +9,19 @@ use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
-use near_sdk::serde_json::{json, self, to_string};
-use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue};
+use near_sdk::serde_json::{json, self, to_string, Value};
+use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue, sys};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip};
-use proposal::Proposal;
+use proposal::{Proposal, FunctionCall, ActionCall};
 use role::{RoleManagement};
 use uint::hex;
-use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account, set_account};
+use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account, set_account, get_account_id, init_callback};
 use crate::access::Relationship;
 use crate::post::Hierarchy;
+use crate::proposal::ProposalInput;
 use crate::role::Role;
-use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, is_registered};
+use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, is_registered, get_predecessor_id};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -97,6 +98,7 @@ args : {
 }
 */
 const DRIP_CONTRACT: &str = "drip_contract";
+const PREDECESSOR_REGISTER: u64 = std::u64::MAX - 3;
 
 
 #[near_bindgen]
@@ -127,7 +129,7 @@ impl Community {
     #[init(ignore_state)]
     pub fn migrate() -> Self {
         let mut this: Community = env::state_read().expect("ERR_NOT_INITIALIZED");
-        assert!(env::predecessor_account_id() == this.owner_id || env::predecessor_account_id() == env::current_account_id(), "owner only");
+        assert!(get_predecessor_id() == this.owner_id || get_predecessor_id() == env::current_account_id(), "owner only");
         
         let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
         account.set_registered(true);
@@ -169,21 +171,26 @@ impl Community {
     }
 
     pub fn follow(&mut self, account_id: AccountId) {
-        let sender_id = env::predecessor_account_id();
+        init_callback();
+        let sender_id = get_predecessor_id();
         let hash = env::sha256(&(sender_id.to_string() + "follwing" + &account_id.to_string()).into_bytes());
         set(&hash, 0);
         Event::log_follow(sender_id, account_id,None);
     }
 
     pub fn unfollow(&mut self, account_id: AccountId) {
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let hash = env::sha256(&(sender_id.to_string() + "follwing" + &account_id.to_string()).into_bytes());
         remove(&hash);
         Event::log_unfollow(sender_id, account_id, None);
     }
+
+    pub fn agree_rules(&mut self) {
+
+    }
     
     #[payable]
-    pub fn join(&mut self, inviter_id: Option<AccountId>) {
+    pub fn join(&mut self, account_id: Option<AccountId>, inviter_id: Option<AccountId>) {
         let initial_storage_usage = env::storage_usage();
         if let AccessLimit::Free = self.access {
             return
@@ -193,7 +200,7 @@ impl Community {
             _ => assert!(env::attached_deposit() >= JOIN_DEPOSIT, "not enough deposit")
         }
         
-        let sender_id = env::predecessor_account_id();
+        let sender_id = account_id.unwrap_or(get_predecessor_id());
         let mut account = match get_account(&sender_id).get_registered() {
             Some(mut account)=> {
                 account.set_registered(true);
@@ -228,7 +235,7 @@ impl Community {
             return
         }
         assert_one_yocto();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let account = get_account(&sender_id).get_registered();
         if let Some(mut account) = account {
             account.set_registered(false);
@@ -239,7 +246,7 @@ impl Community {
     #[payable]
     pub fn deposit(&mut self) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let mut account = get_account(&sender_id).registered();
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         self.accounts.insert(&sender_id, &account);
@@ -248,7 +255,7 @@ impl Community {
 
     #[payable]
     pub fn withdraw(&mut self, asset: AssetKey, amount: U128) -> PromiseOrValue<()> {
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let account = get_account(&sender_id).registered();
         assert!(account.get_balance(&asset).checked_sub(amount.0).is_some(), "not enough balance");
         let result = match &asset {
@@ -294,24 +301,7 @@ impl Community {
         assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
         let sender_id = env::signer_account_id();
         let message = (sender_id.to_string() + &timestamp.to_string()).as_bytes().to_vec();
-        let non_near_account_id = match id.as_str() {
-            "eth" => {
-                let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
-                let hash = env::keccak256(&[prefix, message].concat());
-                let sign = hex::decode(sign).unwrap();
-                let (sign, v) = from_rpc_sig(&sign);
-                
-                let public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
-                let address = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
-                AccountId::from_str(&address).unwrap()
-            },
-            _ => {
-                let sign = bs58::decode(sign).into_vec().unwrap();
-                let pk = hex::decode(public_key.clone()).unwrap();
-                assert!(verify(message, sign, pk), "not verified");
-                AccountId::from_str(&public_key).unwrap()
-            }
-        };
+        let non_near_account_id = get_account_id(id, message, sign, public_key);
         let drips = self.drip.gather_drip(non_near_account_id.clone(), sender_id.clone());
 
         Event::log_other(
@@ -320,6 +310,58 @@ impl Community {
             }).to_string())
         );
     }
+
+    pub fn decode(&mut self, id: String, public_key: String, action: ActionCall, sign: String, timestamp: U64) -> Option<String> {
+        let timestamp = u64::from(timestamp);
+        assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
+        let message = (public_key.to_string() + &json!(action).to_string() + &timestamp.to_string()).as_bytes().to_vec();
+        let account_id = get_account_id(id, message, sign, public_key);
+        let account_id = account_id.try_to_vec().unwrap();
+        let args_map = match serde_json::from_str(&action.args).unwrap() {
+            Value::Object(map) => map,
+            _ => panic!("invalid args")
+        };
+        unsafe {
+            sys::write_register(PREDECESSOR_REGISTER, account_id.len() as u64, account_id.as_ptr() as u64);
+        }
+        match action.method_name.as_str() {
+            "agree_rules" => {
+                None
+            },
+            "add_content" => {
+                let args = args_map.get("args").unwrap().to_string();
+                let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
+                let options = match args_map.get("options") {
+                    Some(v) => Some(serde_json::from_str::<HashMap<String, String>>(&v.to_string()).unwrap()),
+                    None => None
+                };
+                Some(String::from(&self.add_content(args, hierarchies, options)))
+            },
+            "like" => {
+                let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
+                self.like(hierarchies);
+                None
+            },
+            // "unlike" => {
+            //     let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
+            //     self.unlike(hierarchies);
+            //     None
+            // },
+            "add_proposal" => {
+                let proposal = serde_json::from_str::<ProposalInput>(&args_map.get("proposal").unwrap().to_string()).unwrap();
+                Some(self.add_proposal(proposal))
+            },
+            "vote" => {
+                let id = args_map.get("id").unwrap().to_string();
+                let vote = serde_json::from_str::<u32>(&args_map.get("vote").unwrap().to_string()).unwrap();
+                let amount = serde_json::from_str::<U128>(&args_map.get("amount").unwrap().to_string()).unwrap();
+                self.vote(id, vote, amount);
+                None
+            }
+            _ => panic!("not support")
+        }
+        
+    }
 }
 
 
@@ -327,9 +369,9 @@ impl Community {
 mod tests {
     use std::{collections::HashMap, str::FromStr};
 
-    use near_sdk::{base64, serde_json, borsh::{BorshDeserialize, BorshSerialize}, AccountId, env, json_types::U64};
+    use near_sdk::{base64, serde_json::{self, json}, borsh::{BorshDeserialize, BorshSerialize}, AccountId, env, json_types::{U64, U128}, log};
     use uint::hex;
-    use crate::{Community, OldCommunity, utils::{from_rpc_sig}};
+    use crate::{Community, OldCommunity, utils::{from_rpc_sig}, proposal::ActionCall};
 
 
     #[test]
@@ -372,6 +414,21 @@ mod tests {
         // let address = to_checksum_address(account_id);
         // println!("{:?}", address)
         // AccountId::from_str(&().unwrap();
+    }
+
+    #[test]
+    pub fn test_decode() {
+        let action = ActionCall {
+            method_name: "add_content".to_string(),
+            args: "{\"args\":\"{\\\"text\\\":\\\"bbbbbb\\\",\\\"imgs\\\":[]}\",\"hierarchies\":[],\"extra\":{\"at\":\"[]\",\"drip_royalty\":5}}".to_string(),
+            deposit: U128::from(0),
+            gas: U64::from(0)
+        };
+        let timestamp = "1690383153326000000".to_string();
+        let message = (json!(action).to_string() + &timestamp);
+        // let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
+        // let hash = hex::encode(env::keccak256(&[prefix, message].concat()));
+        log!("{:?}", message)
     }
 
 }

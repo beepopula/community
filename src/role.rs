@@ -143,7 +143,7 @@ impl Community {
 
     pub fn set_global_role(&mut self, permissions: Vec<Permission>, options: Vec<(Relationship, Option<Access>)>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::SetRole(None)), "not allowed");
         for i in 0..permissions.len() {
             self.role_management.global_role.insert(permissions[i].clone(), options[i].clone());
@@ -153,7 +153,7 @@ impl Community {
 
     pub fn add_role(&mut self, alias: String, permissions: Vec<Permission>, mod_level: u32, override_level: u32) -> String {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::SetRole(None)), "not allowed");
         let hash = bs58::encode(env::sha256((alias.clone() + &env::block_timestamp().to_string()).as_bytes())).into_string();
         let mut role = match self.role_management.roles.get(&hash) {
@@ -181,7 +181,7 @@ impl Community {
 
     pub fn set_role(&mut self, hash: Base58CryptoHash, alias: Option<String>, permissions: Option<Vec<Permission>>, mod_level: Option<u32>, override_level: Option<u32>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let hash = String::from(&hash);
         assert!(self.can_execute_action(None, Permission::SetRole(Some(hash.clone()))), "not allowed");
         let mut role = match self.role_management.roles.get(&hash) {
@@ -215,7 +215,7 @@ impl Community {
     pub fn remove_role(&mut self, hash: String) {
         let initial_storage_usage = env::storage_usage();
         Base58CryptoHash::try_from(hash.clone()).unwrap();    //exclude "all" and "ban"
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::DelRole(Some(hash.clone()))), "not allowed");
         self.role_management.roles.remove(&hash);
         set_storage_usage(initial_storage_usage, None);
@@ -224,7 +224,7 @@ impl Community {
     #[payable]
     pub fn add_member_to_role(&mut self, hash: String, members: Vec<(AccountId, Option<HashMap<String, String>>)>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::AddMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
@@ -240,7 +240,7 @@ impl Community {
 
     pub fn remove_member_from_role(&mut self, hash: String, members: Vec<AccountId>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, Permission::RemoveMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
@@ -256,7 +256,7 @@ impl Community {
 
     pub fn set_members(&mut self, add: HashMap<String, Vec<AccountId>>, remove: HashMap<String, Vec<AccountId>>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = env::predecessor_account_id();
+        let sender_id = get_predecessor_id();
         let mod_level = self.get_user_mod_level(&sender_id);
         for (hash, members) in add.iter() {
             if !self.can_execute_action(None, Permission::AddMember(Some(hash.clone()))) {

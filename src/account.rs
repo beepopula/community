@@ -3,7 +3,6 @@ use crate::{*, utils::get_access_limit};
 
 const REGISTERED: &str = "registered";
 const DRIP: &str = "drip";
-const TOTAL_DRIP: &str = "total_drip";
 const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
 const TOTAL_CONTENT_COUNT: &str = "total_content_count";
@@ -56,12 +55,24 @@ impl Account {
         };
         this.data.insert(REGISTERED.to_string(), json!(false).to_string());
         this.data.insert(DRIP.to_string(), 0.to_string());
-        this.data.insert(TOTAL_DRIP.to_string(), 0.to_string());
         this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
         this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
         this.data.insert(TOTAL_CONTENT_COUNT.to_string(), 0.to_string());
         
         this
+    }
+
+    pub fn get_data<T>(&self, key: &str) -> Option<T> 
+    where T: for<'a> Deserialize<'a>
+    {
+        let value = match self.data.get(key) {
+            Some(v) => v,
+            None => return None
+        };
+        match serde_json::from_str::<T>(value) {
+            Ok(res) => Some(res),
+            Err(_) => None
+        }
     }
 
     pub fn registered(self) -> Self {
@@ -83,12 +94,8 @@ impl Account {
     pub fn is_registered(&self) -> bool {
         match get_access_limit() {
             AccessLimit::Free => true,
-            _ => match self.data.get(REGISTERED) {
-                Some(v) => serde_json::from_str(v).unwrap(),
-                None => false
-            }
+            _ => self.get_data::<bool>(REGISTERED).unwrap()
         }
-        
     }
 
     pub fn set_registered(&mut self, registered: bool) {
@@ -96,21 +103,22 @@ impl Account {
     }
 
     pub fn get_drip(&self) -> u128 {
-        let drip: U128 = serde_json::from_str(self.data.get(DRIP).unwrap_or(&"0".to_string())).unwrap_or(U128::from(0));
+        let drip = self.get_data::<U128>(DRIP).unwrap_or(U128::from(0));
         drip.0
     }
 
     pub fn increase_drip(&mut self, amount: u128) {
         let drip = self.get_drip();
+
         if let Some(new_drip) = drip.checked_add(amount) {
             let drip: U128 = new_drip.into();
             self.data.insert(DRIP.to_string(), json!(drip).to_string());
         }
 
-        let balance = AssetKey::Drip((None, env::current_account_id()));
-        let total_drip = self.get_balance(&balance);
+        let asset = AssetKey::Drip((None, env::current_account_id()));
+        let total_drip = self.get_balance(&asset);
         if let Some(new_total_drip) = total_drip.checked_add(amount) {
-            self.increase_balance(balance, amount);
+            self.increase_balance(asset, amount);
         }
     }
 

@@ -22,7 +22,7 @@ pub(crate) fn refund_extra_storage_deposit(storage_used: StorageUsage, used_bala
 
     let refund = attached_deposit - required_cost;
     if refund > 1 {
-        Promise::new(env::predecessor_account_id()).transfer(refund);
+        Promise::new(get_predecessor_id()).transfer(refund);
     }
 }
 
@@ -207,6 +207,40 @@ pub(crate) fn from_rpc_sig(buf: &[u8]) -> (Vec<u8>, u8) {
     let v = u8::try_from_slice(&buf[32..33]).unwrap() >> 7;
     sign[32] &= 0x7f;
     return (sign, v)
+}
+
+pub(crate) fn get_account_id(id: String, message: Vec<u8>, sign: String, public_key: String) -> AccountId {
+    match id.as_str() {
+        "eth" => {
+            let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
+            let hash = env::keccak256(&[prefix, message].concat());
+            let sign = hex::decode(sign).unwrap();
+            let (sign, v) = from_rpc_sig(&sign);
+            
+            let public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
+            let address = "0x".to_string() + &hex::encode(env::keccak256(&public_key.to_vec())[12..].to_vec());
+            AccountId::from_str(&address).unwrap()
+        },
+        _ => {
+            let sign = bs58::decode(sign).into_vec().unwrap();
+            let pk = hex::decode(public_key.clone()).unwrap();
+            assert!(verify(message, sign, pk), "not verified");
+            AccountId::from_str(&public_key).unwrap()
+        }
+    }
+}
+
+pub(crate) fn get_predecessor_id() -> AccountId {
+    match env::read_register(PREDECESSOR_REGISTER) {
+        Some(v) => AccountId::try_from_slice(&v).unwrap_or(env::predecessor_account_id()),
+        None => env::predecessor_account_id()
+    }
+}
+
+pub(crate) fn init_callback() {
+    if env::signer_account_id() != get_predecessor_id() {
+        Promise::new(env::signer_account_id()).function_call("on_callback".to_string(), json!({}).to_string().into_bytes(), 0, env::prepaid_gas() / 3);
+    }
 }
 
 // pub(crate) fn to_checksum_address(address: String) -> String {
