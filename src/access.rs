@@ -60,10 +60,7 @@ pub enum Relationship {
 
 impl Access {
     pub fn check_account(&self, account_id: &AccountId) -> bool {
-        let account = match get_account(account_id).get_registered() {
-            Some(v) => v,
-            None => return false
-        };
+        let account = get_account(account_id);
         let mut fullfill = true;
         match self.relationship {
             Relationship::Or => fullfill = false,

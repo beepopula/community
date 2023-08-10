@@ -7,9 +7,7 @@ impl Community {
         let sender_id = get_predecessor_id();
         let mut metadata = vec![];
         for (key, val) in items {
-            if !self.can_execute_action(None, Permission::Other(Some(key.clone()))) {
-                continue
-            }
+            assert!(self.can_execute_action(None, None, Permission::Other(Some(key.clone()))));
             metadata.push(Metadata {
                 key,
                 val

@@ -5,7 +5,7 @@ impl Community {
     pub(crate) fn internal_report(&mut self, sender_id: AccountId, hierarchies: Vec<Hierarchy>) {
         let initial_storage_usage = env::storage_usage();
 
-        assert!(self.can_execute_action(None, Permission::Report), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::Report), "not allowed");
 
         let hierarchy = hierarchies.get(hierarchies.len() - 1).unwrap();
         let content_account_id = hierarchy.account_id.clone();

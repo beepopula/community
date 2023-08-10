@@ -21,7 +21,7 @@ use crate::access::Relationship;
 use crate::post::Hierarchy;
 use crate::proposal::ProposalInput;
 use crate::role::Role;
-use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, is_registered, get_predecessor_id};
+use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, get_predecessor_id};
 use std::convert::TryFrom;
 use role::Permission;
 use access::Access;
@@ -186,7 +186,7 @@ impl Community {
     }
 
     pub fn agree_rules(&mut self) {
-
+        init_callback()
     }
     
     #[payable]
@@ -201,7 +201,7 @@ impl Community {
         }
         
         let sender_id = account_id.unwrap_or(get_predecessor_id());
-        let mut account = match get_account(&sender_id).get_registered() {
+        let mut account = match self.accounts.get(&sender_id) {
             Some(mut account)=> {
                 account.set_registered(true);
                 account
@@ -289,7 +289,7 @@ impl Community {
     pub fn collect_drip(&mut self) -> U128 {
         assert_one_yocto();
         let sender_id = env::signer_account_id();
-        assert!(is_registered(&sender_id), "account not found");
+        assert!(get_account(&sender_id).is_registered(), "account not found");
         self.drip.get_and_clear_drip(sender_id)
     }
 
@@ -312,6 +312,7 @@ impl Community {
     }
 
     pub fn decode(&mut self, id: String, public_key: String, action: ActionCall, sign: String, timestamp: U64) -> Option<String> {
+        Promise::new(env::signer_account_id()).function_call("on_callback".to_string(), json!({}).to_string().into_bytes(), 0, env::prepaid_gas() / 3);
         let timestamp = u64::from(timestamp);
         assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
         let message = (public_key.to_string() + &json!(action).to_string() + &timestamp.to_string()).as_bytes().to_vec();

@@ -144,7 +144,7 @@ impl Proposal {
         amount: u128
     ) {
         assert!(self.votes.get(&account_id).is_none(), "already voted");
-        let mut account: Account = get_account(account_id).registered();
+        let mut account: Account = get_account(account_id);
         match &self.bond {
             Some((bond, amount)) => {
                 assert!(account.get_balance(bond) >= amount.0, "not enough bond");
@@ -177,14 +177,14 @@ impl Proposal {
             }
             None => 1,
         };
-        let amount = match self.method.as_str() {
+        let votes = match self.method.as_str() {
+            "quadratic" => ((amount / 100_000_000_000_000_000_000_000) as f64).sqrt() as u128,
             _ => amount
         };
         let mut option = self.options.get_mut(vote as usize).unwrap();
         let index = option.accounts.0;
         self.votes.insert(&account_id, &(vote.clone(), amount.into(), index.into()));
-        let index = option.accounts.0 + 1;
-        option.vote_count = (option.vote_count.0 + amount).into();
+        option.vote_count = (option.vote_count.0 + votes).into();
         option.accounts = (option.accounts.0 + 1).into();
         
     }
@@ -335,7 +335,7 @@ impl Community {
                 
             }
         }
-        assert!(self.can_execute_action(None, Permission::AddProposal(have_action)), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::AddProposal(have_action)), "not allowed");
 
         if have_action {
             assert!(proposal.until.0 - proposal.begin.0 > 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
@@ -356,7 +356,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let mut proposal: Proposal = self.proposals.get(&id).unwrap().into();
         let sender_id = get_predecessor_id();
-        assert!(self.can_execute_action(None, Permission::Vote), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::Vote), "not allowed");
         assert!(
             matches!(proposal.get_status(), ProposalStatus::InProgress),
             "Expired"
@@ -471,7 +471,7 @@ impl Community {
                         vec![]
                     }
                 },
-                _ => continue
+                _ => panic!("in progress")
             });
         }
         

@@ -1,4 +1,4 @@
-use crate::{*, utils::{get_root_id, is_registered}};
+use crate::{*, utils::{get_root_id}};
 use utils::get_parent_contract_id;
 
 #[near_bindgen]

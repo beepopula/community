@@ -136,13 +136,13 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
     Base58CryptoHash::from(target_hash)
 }
 
-pub(crate) fn is_registered(account_id: &AccountId) -> bool {
-    let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-    match accounts.get(&account_id) {
-        Some(v) => v.is_registered(),
-        None => false
-    }
-}
+// pub(crate) fn is_registered(account_id: &AccountId) -> bool {
+//     let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
+//     match accounts.get(&account_id) {
+//         Some(v) => v.is_registered(),
+//         None => false
+//     }
+// }
 
 pub(crate) fn get_account(account_id: &AccountId) -> Account {
     let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);

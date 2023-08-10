@@ -1,7 +1,6 @@
 use crate::*;
 use crate::access::{FTCondition, Condition, Relationship};
 use crate::account::AssetKey;
-use crate::utils::{is_registered};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 
@@ -22,6 +21,8 @@ use near_sdk::{env, AccountId, Balance};
 //   until: U64,     for time limit groups
 
 #[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
 #[derive(Debug, Clone)]
 pub struct Role {
     /// Kind of the role: defines which users this permissions apply.
@@ -144,7 +145,7 @@ impl Community {
     pub fn set_global_role(&mut self, permissions: Vec<Permission>, options: Vec<(Relationship, Option<Access>)>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
-        assert!(self.can_execute_action(None, Permission::SetRole(None)), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::SetRole(None)), "not allowed");
         for i in 0..permissions.len() {
             self.role_management.global_role.insert(permissions[i].clone(), options[i].clone());
         }
@@ -154,7 +155,7 @@ impl Community {
     pub fn add_role(&mut self, alias: String, permissions: Vec<Permission>, mod_level: u32, override_level: u32) -> String {
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
-        assert!(self.can_execute_action(None, Permission::SetRole(None)), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::SetRole(None)), "not allowed");
         let hash = bs58::encode(env::sha256((alias.clone() + &env::block_timestamp().to_string()).as_bytes())).into_string();
         let mut role = match self.role_management.roles.get(&hash) {
             Some(v) => panic!("role already exist"),
@@ -183,7 +184,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
         let hash = String::from(&hash);
-        assert!(self.can_execute_action(None, Permission::SetRole(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::SetRole(Some(hash.clone()))), "not allowed");
         let mut role = match self.role_management.roles.get(&hash) {
             Some(v) => v.clone(),
             None => panic!("role not exist")
@@ -216,7 +217,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         Base58CryptoHash::try_from(hash.clone()).unwrap();    //exclude "all" and "ban"
         let sender_id = get_predecessor_id();
-        assert!(self.can_execute_action(None, Permission::DelRole(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::DelRole(Some(hash.clone()))), "not allowed");
         self.role_management.roles.remove(&hash);
         set_storage_usage(initial_storage_usage, None);
     }
@@ -225,14 +226,12 @@ impl Community {
     pub fn add_member_to_role(&mut self, hash: String, members: Vec<(AccountId, Option<HashMap<String, String>>)>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
-        assert!(self.can_execute_action(None, Permission::AddMember(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::AddMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
         let mod_level = self.get_user_mod_level(&sender_id);
         for (account_id, options) in members {
-            if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
-                continue
-            }
+            assert!(mod_level > self.get_user_mod_level(&account_id), "not allowed");
             role_members.insert(&account_id, &options.unwrap_or(HashMap::new()));
         }
         set_storage_usage(initial_storage_usage, None);
@@ -241,14 +240,12 @@ impl Community {
     pub fn remove_member_from_role(&mut self, hash: String, members: Vec<AccountId>) {
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
-        assert!(self.can_execute_action(None, Permission::RemoveMember(Some(hash.clone()))), "not allowed");
+        assert!(self.can_execute_action(None, None, Permission::RemoveMember(Some(hash.clone()))), "not allowed");
         let role = self.role_management.roles.get(&hash).expect(format!("{} not found", hash.as_str()).as_str());
         let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
         let mod_level = self.get_user_mod_level(&sender_id);
         for account_id in members {
-            if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
-                continue
-            }
+            assert!(mod_level > self.get_user_mod_level(&account_id), "not allowed");
             role_members.remove(&account_id);
         }
         set_storage_usage(initial_storage_usage, None);
@@ -259,35 +256,27 @@ impl Community {
         let sender_id = get_predecessor_id();
         let mod_level = self.get_user_mod_level(&sender_id);
         for (hash, members) in add.iter() {
-            if !self.can_execute_action(None, Permission::AddMember(Some(hash.clone()))) {
-                continue
-            }
+            assert!(self.can_execute_action(None, None, Permission::AddMember(Some(hash.clone()))), "not allowed");
             let role = match self.role_management.roles.get(hash) {
                 Some(role) => role,
                 None => continue,
             };
             let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
             for account_id in members {
-                if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
-                    continue
-                }
+                assert!(mod_level > self.get_user_mod_level(&account_id), "not allowed");
                 role_members.insert(&account_id, &HashMap::new());
             }
         }
 
         for (hash, members) in remove.iter() {
-            if !self.can_execute_action(None, Permission::RemoveMember(Some(hash.clone()))) {
-                continue
-            }
+            assert!(self.can_execute_action(None, None, Permission::RemoveMember(Some(hash.clone()))), "not allowed");
             let role = match self.role_management.roles.get(hash) {
                 Some(role) => role,
                 None => continue,
             };
             let mut role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
             for account_id in members {
-                if !is_registered(&account_id) || mod_level <= self.get_user_mod_level(&account_id) {
-                    continue
-                }
+                assert!(self.can_execute_action(None, None, Permission::RemoveMember(Some(hash.clone()))), "not allowed");
                 role_members.remove(&account_id);
             }
         }
@@ -319,7 +308,7 @@ impl Community {
     }
 
     /// Returns set of roles that this user is member of permissions for given user across all the roles it's member of.
-    pub fn get_user_roles(&self, account_id: &AccountId) -> HashMap<String, HashSet<Permission>> {
+    pub fn get_user_roles(&self, account_id: &AccountId) -> HashMap<String, Role> {
         let mut roles = HashMap::default();
         let mut max_override_level = 0;
         for (hash, role) in self.role_management.roles.iter() {
@@ -332,7 +321,7 @@ impl Community {
         for (hash, role) in self.role_management.roles.iter() {
             let role_members: LookupMap<AccountId, HashMap<String, String>> = LookupMap::new(role.members.clone());
             if role.override_level >= max_override_level && role_members.contains_key(&account_id) {
-                roles.insert(hash.clone(), role.permissions.clone());
+                roles.insert(hash.clone(), role.clone());
             }
         }
         roles
@@ -342,61 +331,82 @@ impl Community {
     /// Returns all roles that allow this action.
     pub fn can_execute_action(
         &self,
-        account_id: Option<AccountId>,
+        signer_id: Option<AccountId>,
+        sender_id: Option<AccountId>,
         permission: Permission
     ) -> bool {
-        let account_id = match account_id {
+        let signer_id = match signer_id {
             Some(v) => v,
             None => env::signer_account_id()
         };
-        if account_id == self.owner_id || account_id == env::current_account_id() {
+        let sender_id = match sender_id {
+            Some(v) => v,
+            None => get_predecessor_id()
+        };
+        if signer_id == self.owner_id || signer_id == env::current_account_id() {
             return true
         }
 
-        if !is_registered(&account_id) {
+        if !get_account(&signer_id).is_registered() {
             return false
         }
 
-        match self.check_global_allowed(&permission, &account_id) {
-            Some(allowed) => return allowed,
-            None => {}
+        let mut account_ids = vec![signer_id.clone()];
+        if signer_id != sender_id {
+            account_ids.push(sender_id);
         }
 
-        let roles = self.get_user_roles(&account_id);
-        let mut allowed = false;
-        roles
-            .into_iter()
-            .for_each(|(_, permissions)| {
-                let allowed_role = self.check_allowed(&permission, &permissions, &account_id);
-                allowed = allowed || allowed_role;
-            });
-        allowed
+
+        for account_id in account_ids {
+            let mut allowed = false;
+            let mut max_override_level = 0;
+            let roles = self.get_user_roles(&account_id);
+            for (_, role) in roles.into_iter() {
+                max_override_level = role.override_level;
+                if self.check_allowed(&permission, &role.permissions, &account_id) {
+                    allowed = true;
+                    break
+                }
+            }
+            if max_override_level == 0 && allowed == false {
+                match self.check_global_allowed(&permission, &account_id) {
+                    Some(a) => {
+                        allowed = a;
+                    },
+                    None => {}
+                }
+            }
+            if allowed == false {
+                return false
+            }
+        }
+        true
     }
 
     pub fn get_allowed_roles(&self,
         account_id: AccountId,
         permission: Option<Permission>
     ) -> Vec<String> {
-        if !is_registered(&account_id) {
+        if !get_account(&account_id).is_registered() {
             return Vec::new()
         }
         let roles = self.get_user_roles(&account_id);
         let mut allowed = false;
         let allowed_roles = roles
             .into_iter()
-            .filter_map(|(role, permissions)| {
+            .filter_map(|(role_name, role)| {
                 match &permission {
                     Some(permission) => {
-                        let allowed_role = self.check_allowed(&permission, &permissions, &account_id);
+                        let allowed_role = self.check_allowed(&permission, &role.permissions, &account_id);
                         allowed = allowed || allowed_role;
                         if allowed_role {
-                            Some(role)
+                            Some(role_name)
                         } else {
                             None
                         }
                     },
                     None => {
-                        Some(role)
+                        Some(role_name)
                     }
                 }
                 
