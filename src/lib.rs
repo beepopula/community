@@ -17,15 +17,14 @@ use proposal::{Proposal, FunctionCall, ActionCall};
 use role::{RoleManagement};
 use uint::hex;
 use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_account, set_account, get_account_id, init_callback};
-use crate::access::Relationship;
 use crate::post::Hierarchy;
 use crate::proposal::ProposalInput;
 use crate::role::Role;
 use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, get_predecessor_id};
 use std::convert::TryFrom;
 use role::Permission;
-use access::Access;
 use account::AssetKey;
+use account::{Access, Relationship};
 
 
 pub mod utils;
@@ -35,7 +34,6 @@ pub mod drip;
 pub mod view;
 pub mod events;
 pub mod role;
-pub mod access;
 pub mod account;
 pub mod resolver;
 pub mod internal;
@@ -116,59 +114,59 @@ impl Community {
             proposals: UnorderedMap::new(StorageKey::Proposals),
             access: AccessLimit::Registry
         };
-        let mut account = this.accounts.get(&owner_id).unwrap_or_default();
+        let mut account = get_account(&owner_id);
         account.set_registered(true);
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
         this.accounts.insert(&owner_id, &account);
-        let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
+        let mut account = get_account(&env::current_account_id());
         account.set_registered(true);
         this.accounts.insert(&env::current_account_id(), &account);
         this
     }
 
-    #[init(ignore_state)]
-    pub fn migrate() -> Self {
-        let mut this: Community = env::state_read().expect("ERR_NOT_INITIALIZED");
-        assert!(get_predecessor_id() == this.owner_id || get_predecessor_id() == env::current_account_id(), "owner only");
+    // #[init(ignore_state)]
+    // pub fn migrate() -> Self {
+    //     let mut this: Community = env::state_read().expect("ERR_NOT_INITIALIZED");
+    //     assert!(get_predecessor_id() == this.owner_id || get_predecessor_id() == env::current_account_id(), "owner only");
         
-        let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
-        account.set_registered(true);
-        this.accounts.insert(&env::current_account_id(), &account);
-        let mut mod_permissions = HashSet::new();
-        mod_permissions.insert(Permission::AddContent(0));
-        mod_permissions.insert(Permission::AddContent(1));
-        mod_permissions.insert(Permission::AddContent(2));
-        mod_permissions.insert(Permission::DelContent);
-        mod_permissions.insert(Permission::AddEncryptContent(0));
-        mod_permissions.insert(Permission::AddEncryptContent(1));
-        mod_permissions.insert(Permission::AddEncryptContent(2));
-        mod_permissions.insert(Permission::DelEncryptContent);
-        mod_permissions.insert(Permission::Like);
-        mod_permissions.insert(Permission::Unlike);
-        mod_permissions.insert(Permission::Report);
-        mod_permissions.insert(Permission::Vote);
-        mod_permissions.insert(Permission::AddProposal(false));
-        mod_permissions.insert(Permission::AddProposal(true));
-        mod_permissions.insert(Permission::ReportConfirm);
-        mod_permissions.insert(Permission::DelOthersContent);
-        mod_permissions.insert(Permission::SetRole(None));
-        mod_permissions.insert(Permission::DelRole(None));
-        mod_permissions.insert(Permission::AddMember(None));
-        mod_permissions.insert(Permission::RemoveMember(None));
-        mod_permissions.insert(Permission::Other(None));
-        this.role_management.roles.insert("mod".to_string(), Role { 
-            alias: "Mod".to_string(),
-            members: "mod_member".to_string().into_bytes(), 
-            permissions:  mod_permissions,
-            mod_level: 2,
-            override_level: 0
-        });
-        this.role_management.global_role.insert(Permission::Vote, (Relationship::Or, None));
-        this.role_management.global_role.insert(Permission::AddProposal(false), (Relationship::Or, None));
-        this.role_management.global_role.insert(Permission::AddProposal(true), (Relationship::And, None));
-        env::state_write::<Community>(&this);
-        this
-    }
+    //     let mut account = this.accounts.get(&env::current_account_id()).unwrap_or_default();
+    //     account.set_registered(true);
+    //     this.accounts.insert(&env::current_account_id(), &account);
+    //     let mut mod_permissions = HashSet::new();
+    //     mod_permissions.insert(Permission::AddContent(0));
+    //     mod_permissions.insert(Permission::AddContent(1));
+    //     mod_permissions.insert(Permission::AddContent(2));
+    //     mod_permissions.insert(Permission::DelContent);
+    //     mod_permissions.insert(Permission::AddEncryptContent(0));
+    //     mod_permissions.insert(Permission::AddEncryptContent(1));
+    //     mod_permissions.insert(Permission::AddEncryptContent(2));
+    //     mod_permissions.insert(Permission::DelEncryptContent);
+    //     mod_permissions.insert(Permission::Like);
+    //     mod_permissions.insert(Permission::Unlike);
+    //     mod_permissions.insert(Permission::Report);
+    //     mod_permissions.insert(Permission::Vote);
+    //     mod_permissions.insert(Permission::AddProposal(false));
+    //     mod_permissions.insert(Permission::AddProposal(true));
+    //     mod_permissions.insert(Permission::ReportConfirm);
+    //     mod_permissions.insert(Permission::DelOthersContent);
+    //     mod_permissions.insert(Permission::SetRole(None));
+    //     mod_permissions.insert(Permission::DelRole(None));
+    //     mod_permissions.insert(Permission::AddMember(None));
+    //     mod_permissions.insert(Permission::RemoveMember(None));
+    //     mod_permissions.insert(Permission::Other(None));
+    //     this.role_management.roles.insert("mod".to_string(), Role { 
+    //         alias: "Mod".to_string(),
+    //         members: "mod_member".to_string().into_bytes(), 
+    //         permissions:  mod_permissions,
+    //         mod_level: 2,
+    //         override_level: 0
+    //     });
+    //     this.role_management.global_role.insert(Permission::Vote, (Relationship::Or, None));
+    //     this.role_management.global_role.insert(Permission::AddProposal(false), (Relationship::Or, None));
+    //     this.role_management.global_role.insert(Permission::AddProposal(true), (Relationship::And, None));
+    //     env::state_write::<Community>(&this);
+    //     this
+    // }
 
     pub fn follow(&mut self, account_id: AccountId) {
         init_callback();
@@ -190,25 +188,20 @@ impl Community {
     }
     
     #[payable]
-    pub fn join(&mut self, account_id: Option<AccountId>, inviter_id: Option<AccountId>) {
-        let initial_storage_usage = env::storage_usage();
+    pub fn join(&mut self, account_id: Option<AccountId>, inviter_id: Option<AccountId>, options: Option<HashMap<String, String>>) {
         if let AccessLimit::Free = self.access {
             return
         }
-        match self.access {
-            AccessLimit::Free => {},
-            _ => assert!(env::attached_deposit() >= JOIN_DEPOSIT, "not enough deposit")
-        }
-        
+
+        let initial_storage_usage = env::storage_usage();
         let sender_id = account_id.unwrap_or(get_predecessor_id());
+        
         let mut account = match self.accounts.get(&sender_id) {
-            Some(mut account)=> {
-                account.set_registered(true);
+            Some(account)=> {
                 account
             },
             None => {
-                let mut account = Account::default();
-                account.set_registered(true);
+                let account = Account::new(&sender_id);
                 if let Some(inviter_id) = inviter_id {
                     let drips = self.drip.set_invite_drip(inviter_id.clone(), sender_id.clone());
                     Event::log_invite(
@@ -222,7 +215,20 @@ impl Community {
                 account
             }
         };
+        let near_deposit = account.get_balance(&AssetKey::FT(AccountId::from_str("near").unwrap()));
+        assert!(near_deposit + env::attached_deposit() >= JOIN_DEPOSIT, "not enough deposit");
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+        match self.access.clone() {
+            AccessLimit::Free => {},
+            AccessLimit::Registry => account.set_registered(true),
+            AccessLimit::TokenLimit(access) => {
+                if self.can_execute_action(None, None, Permission::SetRole(None)) {
+                    account.set_registered(true)
+                } else {
+                    assert!(account.set_condition(&access, options), "not allowed");
+                }
+            }
+        }
         self.accounts.insert(&sender_id, &account);
         set_storage_usage(initial_storage_usage, None);
         

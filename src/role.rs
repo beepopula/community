@@ -1,5 +1,4 @@
 use crate::*;
-use crate::access::{FTCondition, Condition, Relationship};
 use crate::account::AssetKey;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
@@ -330,7 +329,7 @@ impl Community {
     /// Can given user execute given action on this proposal.
     /// Returns all roles that allow this action.
     pub fn can_execute_action(
-        &self,
+        &mut self,
         signer_id: Option<AccountId>,
         sender_id: Option<AccountId>,
         permission: Permission
@@ -415,12 +414,12 @@ impl Community {
         allowed_roles
     }
 
-    fn check_global_allowed(&self, permission: &Permission, account_id: &AccountId) -> Option<bool> {
+    fn check_global_allowed(&mut self, permission: &Permission, account_id: &AccountId) -> Option<bool> {
         if *account_id == self.owner_id || *account_id == env::current_account_id() {
             return Some(true)
         }
         let permissions = self.role_management.global_role.clone();
-        let relationship = match permissions.get(&permission) {
+        let (relationship, option) = match permissions.get(&permission) {
             Some(val) => val,
             None => {
                 match permission {
@@ -459,19 +458,23 @@ impl Community {
             }
         };
         
-        match relationship.0 {
+        match relationship {
             Relationship::Or => {
-                if let Some(access) = &relationship.1 {
-                    if access.check_account(&account_id) {
+                if let Some(mut access) = option.clone() {
+                    let mut account = get_account(account_id);
+                    if account.check_condition(&access) || account.set_condition(&access, None) {
+                        set_account(account_id, &account);
                         return Some(true)
-                    }
+                    } 
                     return None
                 }
                 return Some(true)
             },
             Relationship::And => {
-                if let Some(access) = &relationship.1 {
-                    if !access.check_account(&account_id) {
+                if let Some(mut access) = option.clone() {
+                    let mut account = get_account(account_id);
+                    if !account.check_condition(&access) && !account.set_condition(&access, None) {
+                        set_account(account_id, &account);
                         return Some(false)
                     }
                     return None
@@ -531,7 +534,7 @@ mod tests {
 
     use near_sdk::AccountId;
 
-    use crate::access::{Relationship, Access};
+    use crate::account::{Relationship, Access};
 
     use super::{RoleManagement, Permission};
 
