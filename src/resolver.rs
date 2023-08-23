@@ -3,7 +3,7 @@ use near_non_transferable_token::fungible_token::receiver::FungibleTokenReceiver
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as FtReceiver;
 
 use crate::{*, utils::set_account};
-use crate::account::AssetKey;
+use crate::account::{AssetKey, Condition};
 use crate::drip::get_map_value;
 use crate::utils::get_parent_contract_id;
 use near_sdk::{PromiseOrValue, PromiseResult};
@@ -15,7 +15,9 @@ pub enum MsgInput {
     Report(ReportInput),
     RevokeReport(ReportInput),
     Deposit,
-    Donate
+    Donate,
+    Withdraw,
+    Decrypt(Vec<Hierarchy>)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -128,11 +130,30 @@ impl NtftReceiver for Community {
         promise
     }
 
-
-    #[payable]
     fn ft_on_burn(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
+            MsgInput::Decrypt(hierarchies) => {
+                assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == get_predecessor_id(), "wrong token id");
+                assert!(contract_id == env::current_account_id(), "wrong drip");
+                let hierarchy = hierarchies.get(&hierarchies.len() - 1).unwrap();
+                let options = hierarchy.options.clone().unwrap();
+                let access = serde_json::from_str::<Access>(options.get("access").unwrap()).unwrap();
+                assert!(access.is_payment, "not for burning");
+                let mut need_amount = 0;
+                match access.condition {
+                    Condition::DripCondition(drip_condition) => {
+                        if let Some(token_id) = drip_condition.token_id.clone() {
+                            if token_id == env::predecessor_account_id() && contract_id == contract_id {
+                                need_amount += drip_condition.amount_to_access.0;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                assert!(amount.0 >= need_amount, "not enough drip");
+                PromiseOrValue::Value((amount.0 - need_amount).into())
+            },
             _ => {PromiseOrValue::Value(amount)}
         }
         
