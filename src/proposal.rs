@@ -158,12 +158,7 @@ impl Proposal {
                     AssetKey::Drip((token_id, contract_id)) => {
                         if *token_id == None && *contract_id == env::current_account_id() {
                             let total = account.get_balance(&asset);
-                            let consumed_asset = AssetKey::Drip(
-                                (Some(AccountId::from_str("vote").unwrap()), env::current_account_id())
-                            );
-                            let consumed = account.get_balance(&consumed_asset);
-                            assert!(total - consumed >= amount, "not enough balance");
-                            account.increase_balance(consumed_asset, amount);
+                            assert!(total >= amount, "not enough balance");
                             amount
                         } else {
                             amount
@@ -204,10 +199,10 @@ impl Proposal {
                 match asset {
                     AssetKey::Drip((token_id, contract_id)) => {
                         if *token_id == None && *contract_id == env::current_account_id() {
-                            let consumed_asset = AssetKey::Drip(
-                                (Some(AccountId::from_str("vote").unwrap()), env::current_account_id())
-                            );
-                            account.decrease_balance(consumed_asset, amount.0);
+                            // let consumed_asset = AssetKey::Drip(
+                            //     (Some(AccountId::from_str("vote").unwrap()), env::current_account_id())
+                            // );
+                            // account.decrease_balance(consumed_asset, amount.0);
                         } else {
                             account.increase_balance(asset.clone(), amount.0)
                         }

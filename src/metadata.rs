@@ -3,7 +3,7 @@ use crate::events::Metadata;
 
 #[near_bindgen]
 impl Community {
-    pub fn set_metadata(&self, items: Vec<(String, String)>) {
+    pub fn set_metadata(&mut self, items: Vec<(String, String)>) {
         let sender_id = get_predecessor_id();
         let mut metadata = vec![];
         for (key, val) in items {

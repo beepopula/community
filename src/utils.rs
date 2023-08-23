@@ -26,7 +26,7 @@ pub(crate) fn refund_extra_storage_deposit(storage_used: StorageUsage, used_bala
     }
 }
 
-pub(crate) fn verify(message: Vec<u8>, sign: Vec<u8>, pk: Vec<u8>) -> bool {
+pub(crate) fn verify(message: &[u8], sign: &[u8], pk: &[u8]) -> bool {
     let pk = ed25519_dalek::PublicKey::from_bytes(&pk).unwrap();
     if sign.len() != 64 {
         panic!("Invalid signature data length.");
@@ -148,7 +148,7 @@ pub(crate) fn get_account(account_id: &AccountId) -> Account {
     let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
     match accounts.get(&account_id) {
         Some(v) => v,
-        None => Account::default()
+        None => Account::new(account_id)
     }
 }
 
@@ -224,7 +224,7 @@ pub(crate) fn get_account_id(id: String, message: Vec<u8>, sign: String, public_
         _ => {
             let sign = bs58::decode(sign).into_vec().unwrap();
             let pk = hex::decode(public_key.clone()).unwrap();
-            assert!(verify(message, sign, pk), "not verified");
+            assert!(verify(&message, &sign, &pk), "not verified");
             AccountId::from_str(&public_key).unwrap()
         }
     }

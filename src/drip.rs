@@ -197,6 +197,11 @@ impl Drip {
         let mut account = get_account(&account_id).registered();
         let balance = account.get_drip();
         account.decrease_drip(balance);
+        let asset = AssetKey::Drip((None, env::current_account_id()));
+        let total_drip = account.get_balance(&asset);
+        if let Some(new_total_drip) = total_drip.checked_add(balance) {
+            account.increase_balance(asset, balance);
+        }
         self.accounts.insert(&account_id, &account);
         balance.into()
     }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{*, access::Relationship, utils::get, proposal::{ProposalStatus, Proposal, Opt, ExecutionStatus}};
+use crate::{*, utils::get, proposal::{ProposalStatus, Proposal, Opt, ExecutionStatus}};
 use near_sdk::Balance;
 use utils::{get_content_hash, get_account as get_account_safe};
 use post::Hierarchy;

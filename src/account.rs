@@ -1,11 +1,11 @@
 use crate::{*, utils::get_access_limit};
 
-
 const REGISTERED: &str = "registered";
 const DRIP: &str = "drip";
 const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
 const TOTAL_CONTENT_COUNT: &str = "total_content_count";
+const EXPIRED_AT: &str = "expired_at";
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
@@ -33,23 +33,87 @@ pub struct Account {
     // content_count: u64
 }
 
-impl Default for Account {
-    fn default() -> Self {
-        let mut this = Self {
-            data: HashMap::new(),
-        };
-        this.data.insert(REGISTERED.to_string(), json!(false).to_string());
-        this.data.insert(DRIP.to_string(), 0.to_string());
-        this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
-        this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());
-        this.data.insert(TOTAL_CONTENT_COUNT.to_string(), 0.to_string());
-        this
-    }
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub enum Relationship {
+    Or,
+    And
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct OldAccess
+{
+    pub conditions: Vec<Condition>,
+    pub relationship: Relationship,
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct Access
+{
+    pub condition: Condition,
+    pub expire_duration: Option<U64>,
+    pub is_payment: bool
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub enum Condition {
+    FTCondition(FTCondition),
+    NFTCondition(NFTCondition),
+    DripCondition(DripCondition),
+    SignCondition(SignCondition)
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct FTCondition {
+    pub token_id: AccountId,
+    pub amount_to_access: U128
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct NFTCondition {
+    pub token_id: AccountId,
+    pub amount_to_access: U128,
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct DripCondition {
+    pub token_id: Option<AccountId>,    //for total drips
+    pub contract_id: AccountId,
+    pub amount_to_access: U128,
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub struct SignCondition {
+    pub message: String,
+    pub public_key: String
 }
 
 impl Account {
 
-    pub fn new() -> Self {
+    pub fn new(account_id: &AccountId) -> Self {
         let mut this = Self {
             data: HashMap::new(),
         };
@@ -94,12 +158,22 @@ impl Account {
     pub fn is_registered(&self) -> bool {
         match get_access_limit() {
             AccessLimit::Free => true,
-            _ => self.get_data::<bool>(REGISTERED).unwrap()
+            AccessLimit::Registry => self.get_data::<bool>(REGISTERED).unwrap(),
+            AccessLimit::TokenLimit(access) => self.get_data::<bool>(REGISTERED).unwrap() || self.check_condition(&access)
         }
     }
 
     pub fn set_registered(&mut self, registered: bool) {
         self.data.insert(REGISTERED.to_string(), json!(registered).to_string());
+    }
+
+    pub fn is_expired(&self) -> bool {
+        let expired_at = self.get_data::<U64>(EXPIRED_AT).unwrap_or(U64::from(0));
+        env::block_timestamp() > expired_at.0
+    }
+
+    pub fn set_expired(&mut self, expired_at: U64) {
+        self.data.insert(EXPIRED_AT.to_string(), json!(expired_at).to_string());
     }
 
     pub fn get_drip(&self) -> u128 {
@@ -113,12 +187,6 @@ impl Account {
         if let Some(new_drip) = drip.checked_add(amount) {
             let drip: U128 = new_drip.into();
             self.data.insert(DRIP.to_string(), json!(drip).to_string());
-        }
-
-        let asset = AssetKey::Drip((None, env::current_account_id()));
-        let total_drip = self.get_balance(&asset);
-        if let Some(new_total_drip) = total_drip.checked_add(amount) {
-            self.increase_balance(asset, amount);
         }
     }
 
@@ -186,7 +254,95 @@ impl Account {
         let balance: U128 = balance.into();
         self.data.insert(json!(asset).to_string(), json!(balance).to_string());
     }
-////////////////////////////////////////////////////////  Report Part ////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////  Condition Part ////////////////////////////////////////////////////////////////
 
-    // pub fn report_deposit(&mut self, amount: )
+    pub fn get_signature(&self, public_key: String) -> Option<String> {
+        let key = public_key + "_signature";
+        self.get_data::<String>(&key)
+    }
+
+    pub fn set_signature(&mut self, public_key: String, signature: String) {
+        self.data.insert(public_key, signature);
+    } 
+
+    pub fn check_condition(&self, access: &Access) -> bool {
+        if let Some(expire_duration) = access.expire_duration{
+            if !self.is_expired() {
+                return true
+            }
+        }
+
+        match &access.condition {
+            Condition::FTCondition(ft) => {
+                self.get_balance(&AssetKey::FT(ft.token_id.clone())) >= ft.amount_to_access.0 && !access.is_payment
+            }
+            Condition::NFTCondition(_) => todo!(),
+            Condition::DripCondition(drip) => {
+                self.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0
+            },
+            Condition::SignCondition(sign) => {
+                match self.get_signature(sign.public_key.clone()) {
+                    Some(v) => {
+                        verify(sign.message.as_bytes(), v.as_bytes(), sign.public_key.as_bytes())
+                    },
+                    None => false
+                }
+            }
+        }
+    }
+
+
+    pub fn set_condition(&mut self, access: &Access, options: Option<HashMap<String, String>>) -> bool {
+        // let account = get_account(account_id);
+        match &access.condition {
+            Condition::FTCondition(ft) => {
+                if self.get_balance(&AssetKey::FT(ft.token_id.clone())) >= ft.amount_to_access.0 {
+                    if access.is_payment {
+                        self.decrease_balance(AssetKey::FT(ft.token_id.clone()), ft.amount_to_access.0);
+                    }
+                    if let Some(expire_duration) = access.expire_duration{
+                        let expired_at = U64::from(env::block_timestamp() + expire_duration.0);
+                        self.set_expired(expired_at);
+                    }
+                    true
+                } else {
+                    false
+                }
+            }
+            Condition::NFTCondition(_) => todo!(),
+            Condition::DripCondition(drip) => {
+                self.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0
+            },
+            Condition::SignCondition(sign) => {
+                match &self.get_signature(sign.public_key.clone()) {
+                    Some(v) => {
+                        verify(sign.message.as_bytes(), v.as_bytes(), sign.public_key.as_bytes())
+                    },
+                    None => {
+                        match &options {
+                            Some(map) => match map.get("sign") {
+                                Some(v) => {
+                                    if verify(sign.message.as_bytes(), v.as_bytes(), sign.public_key.as_bytes()) {
+                                        if let Some(expire_duration) = access.expire_duration{
+                                            let expired_at = U64::from(env::block_timestamp() + expire_duration.0);
+                                            self.set_expired(expired_at);
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                                None => false
+                            },
+                            None => false
+                        }
+                    }
+                }
+                
+            }
+        }
+    }
+
+
+
 }
