@@ -196,7 +196,8 @@ impl Community {
                         Some(account) => account,
                         None => continue
                     };
-                    account.increase_balance(AssetKey::Drip((get_arg::<AccountId>(DRIP_CONTRACT), env::current_account_id())), get_map_value(&"report_deposit".to_string()))
+                    account.increase_balance(AssetKey::Drip((get_arg::<AccountId>(DRIP_CONTRACT), env::current_account_id())), get_map_value(&"report_deposit".to_string()));
+                    set_account(account_id, &account);
                 }
             }
         }
