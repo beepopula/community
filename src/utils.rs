@@ -146,8 +146,11 @@ pub(crate) fn set_content(args: String, account_id: AccountId, hash_prefix: Stri
 
 pub(crate) fn get_account(account_id: &AccountId) -> Account {
     let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-    match accounts.get(&account_id) {
-        Some(v) => v,
+    match accounts.get(account_id) {
+        Some(mut v) => {
+            v.data.insert("account_id".to_string(), account_id.to_string());
+            v
+        },
         None => Account::new(account_id)
     }
 }
@@ -207,6 +210,16 @@ pub(crate) fn from_rpc_sig(buf: &[u8]) -> (Vec<u8>, u8) {
     let v = u8::try_from_slice(&buf[32..33]).unwrap() >> 7;
     sign[32] &= 0x7f;
     return (sign, v)
+}
+
+pub(crate) fn verify_secp256k1(message: Vec<u8>, sign: String, public_key: String) -> bool {
+    let prefix = ("\u{0019}Ethereum Signed Message:\n".to_string() + &message.len().to_string()).as_bytes().to_vec();
+    let hash = env::keccak256(&[prefix, message].concat());
+    let sign = hex::decode(sign).unwrap();
+    let (sign, v) = from_rpc_sig(&sign);
+    
+    let derived_public_key = env::ecrecover(&hash, &sign, v, false).unwrap();
+    derived_public_key.to_vec().eq(&hex::decode(public_key).unwrap())
 }
 
 pub(crate) fn get_account_id(id: String, message: Vec<u8>, sign: String, public_key: String) -> AccountId {

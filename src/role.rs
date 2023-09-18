@@ -68,6 +68,13 @@ pub struct RoleManagement {
     pub global_role: HashMap<Permission, (Relationship, Option<Access>)>,
 }
 
+#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Debug)]
+pub struct OldRoleManagement {
+    pub roles: HashMap<String, Role>,
+    pub global_role: HashMap<Permission, (Relationship, Option<OldAccess>)>,
+}
+
 impl RoleManagement {
     pub fn new() -> Self {
         let mut global_permissions = HashMap::new();

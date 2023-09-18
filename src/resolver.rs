@@ -5,7 +5,7 @@ use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver as 
 use crate::{*, utils::set_account};
 use crate::account::{AssetKey, Condition};
 use crate::drip::get_map_value;
-use crate::utils::get_parent_contract_id;
+use crate::utils::{get_parent_contract_id, get_content_hash};
 use near_sdk::{PromiseOrValue, PromiseResult};
 
 #[derive(Serialize, Deserialize)]
@@ -81,7 +81,6 @@ impl FtReceiver for Community {
 #[near_bindgen]
 impl NtftReceiver for Community {
 
-    #[payable]
     fn ft_on_deposit(&mut self, owner_id: AccountId, contract_id: AccountId ,amount: U128, msg: String) -> PromiseOrValue<U128>  {
         let msg_input: MsgInput = serde_json::from_str(&msg).unwrap();
         match msg_input {
@@ -100,8 +99,6 @@ impl NtftReceiver for Community {
                 accounts.insert(&owner_id, &account);
                 PromiseOrValue::Value(0.into())
             }
-            
-            
         }
     }
 
@@ -136,6 +133,7 @@ impl NtftReceiver for Community {
             MsgInput::Decrypt(hierarchies) => {
                 assert!(get_arg::<AccountId>(DRIP_CONTRACT).unwrap_or(AccountId::new_unchecked("".to_string())) == get_predecessor_id(), "wrong token id");
                 assert!(contract_id == env::current_account_id(), "wrong drip");
+                assert!(get_content_hash(hierarchies.clone(), None, true).is_some(), "content not found");
                 let hierarchy = hierarchies.get(&hierarchies.len() - 1).unwrap();
                 let options = hierarchy.options.clone().unwrap();
                 let access = serde_json::from_str::<Access>(options.get("access").unwrap()).unwrap();

@@ -1,11 +1,12 @@
-use crate::{*, utils::get_access_limit};
+use crate::{*, utils::{get_access_limit, verify_secp256k1}};
 
+const ACCOUNT_ID: &str = "account_id";
 const REGISTERED: &str = "registered";
 const DRIP: &str = "drip";
 const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
 const TOTAL_CONTENT_COUNT: &str = "total_content_count";
-const EXPIRED_AT: &str = "expired_at";
+const PERMANENT: &str = "permanent";
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
@@ -60,7 +61,8 @@ pub struct Access
 {
     pub condition: Condition,
     pub expire_duration: Option<U64>,
-    pub is_payment: bool
+    pub is_payment: bool,
+    pub options: Option<HashMap<String, String>>
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
@@ -117,6 +119,7 @@ impl Account {
         let mut this = Self {
             data: HashMap::new(),
         };
+        this.data.insert(ACCOUNT_ID.to_string(), account_id.to_string());
         this.data.insert(REGISTERED.to_string(), json!(false).to_string());
         this.data.insert(DRIP.to_string(), 0.to_string());
         this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
@@ -139,6 +142,10 @@ impl Account {
         }
     }
 
+    pub fn account_id(&self) -> AccountId {
+        AccountId::from_str(self.data.get(ACCOUNT_ID).unwrap()).unwrap()
+    }
+
     pub fn registered(self) -> Self {
         if self.is_registered() {
             self
@@ -156,24 +163,53 @@ impl Account {
     }
 
     pub fn is_registered(&self) -> bool {
-        match get_access_limit() {
-            AccessLimit::Free => true,
-            AccessLimit::Registry => self.get_data::<bool>(REGISTERED).unwrap(),
-            AccessLimit::TokenLimit(access) => self.get_data::<bool>(REGISTERED).unwrap() || self.check_condition(&access)
+        let this: Community = env::state_read().unwrap();
+        if this.owner_id == self.account_id() {
+            return true
         }
+        let access_limit = get_access_limit();
+        let mut registered = match access_limit {
+            AccessLimit::Free => return true,
+            _ => self.get_data::<bool>(REGISTERED).unwrap()
+        };
+        if registered {
+            if self.is_permanent() {
+                return true
+            }
+            registered = match access_limit {
+                AccessLimit::TokenLimit(access) => self.check_condition(&access),
+                _ => return true
+            }
+        }
+        registered
+    }
+
+    pub fn is_permanent(&self) -> bool {
+        self.get_data::<bool>(PERMANENT).unwrap_or(false)
     }
 
     pub fn set_registered(&mut self, registered: bool) {
         self.data.insert(REGISTERED.to_string(), json!(registered).to_string());
     }
 
-    pub fn is_expired(&self) -> bool {
-        let expired_at = self.get_data::<U64>(EXPIRED_AT).unwrap_or(U64::from(0));
-        env::block_timestamp() > expired_at.0
+    pub fn set_permanent(&mut self, is_permanent: bool) {
+        self.data.insert(PERMANENT.to_string(), json!(is_permanent).to_string());
     }
 
-    pub fn set_expired(&mut self, expired_at: U64) {
-        self.data.insert(EXPIRED_AT.to_string(), json!(expired_at).to_string());
+    pub fn is_expired(&self, access: &Access) -> bool {
+        let key = json!(access.condition).to_string();
+        match access.expire_duration {
+            Some(expire_duration) => {
+                let timestamp = self.get_data::<U64>(&key).unwrap_or(U64::from(0));
+                env::block_timestamp() > timestamp.0 + expire_duration.0
+            },
+            None => false
+        }
+    }
+
+    pub fn set_timestamp(&mut self, access: &Access, timestamp: U64) {
+        let key = json!(access.condition).to_string();
+        self.data.insert(key, json!(timestamp).to_string());
     }
 
     pub fn get_drip(&self) -> u128 {
@@ -256,34 +292,41 @@ impl Account {
     }
 ////////////////////////////////////////////////////////  Condition Part ////////////////////////////////////////////////////////////////
 
-    pub fn get_signature(&self, public_key: String) -> Option<String> {
+    pub fn get_signature(&self, public_key: String) -> Option<(String, U64)> {
         let key = public_key + "_signature";
-        self.get_data::<String>(&key)
+        self.get_data::<(String, U64)>(&key)
     }
 
-    pub fn set_signature(&mut self, public_key: String, signature: String) {
-        self.data.insert(public_key, signature);
+    pub fn set_signature(&mut self, public_key: String, signature: String, timestamp: U64) {
+        self.data.insert(public_key + "_signature", json!((signature, timestamp)).to_string());
     } 
 
     pub fn check_condition(&self, access: &Access) -> bool {
-        if let Some(expire_duration) = access.expire_duration{
-            if !self.is_expired() {
-                return true
-            }
+        if !self.is_expired(access) {
+            return true
         }
-
         match &access.condition {
             Condition::FTCondition(ft) => {
                 self.get_balance(&AssetKey::FT(ft.token_id.clone())) >= ft.amount_to_access.0 && !access.is_payment
             }
             Condition::NFTCondition(_) => todo!(),
             Condition::DripCondition(drip) => {
-                self.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0
+                self.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0 && !access.is_payment
             },
             Condition::SignCondition(sign) => {
                 match self.get_signature(sign.public_key.clone()) {
                     Some(v) => {
-                        verify(sign.message.as_bytes(), v.as_bytes(), sign.public_key.as_bytes())
+                        let message = self.account_id().to_string() + &sign.message + &v.1.0.to_string();
+                        let mut can = match sign.public_key.strip_prefix("0x") {
+                            Some(pk) => verify_secp256k1(message.as_bytes().to_vec(), v.0.clone(), pk.to_string()),
+                            None => verify(message.as_bytes(), v.0.as_bytes(), sign.public_key.as_bytes())
+                        };
+                        
+                        if let Some(expire_duration) = access.expire_duration {
+                            log!("{:?}, {:?}", env::block_timestamp(), v.1.0 + expire_duration.0);
+                            can = can && (env::block_timestamp() < v.1.0 + expire_duration.0);
+                        }
+                        can
                     },
                     None => false
                 }
@@ -301,8 +344,8 @@ impl Account {
                         self.decrease_balance(AssetKey::FT(ft.token_id.clone()), ft.amount_to_access.0);
                     }
                     if let Some(expire_duration) = access.expire_duration{
-                        let expired_at = U64::from(env::block_timestamp() + expire_duration.0);
-                        self.set_expired(expired_at);
+                        let timestamp = U64::from(env::block_timestamp());
+                        self.set_timestamp(access, timestamp);
                     }
                     true
                 } else {
@@ -311,38 +354,66 @@ impl Account {
             }
             Condition::NFTCondition(_) => todo!(),
             Condition::DripCondition(drip) => {
-                self.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0
-            },
-            Condition::SignCondition(sign) => {
-                match &self.get_signature(sign.public_key.clone()) {
-                    Some(v) => {
-                        verify(sign.message.as_bytes(), v.as_bytes(), sign.public_key.as_bytes())
-                    },
-                    None => {
-                        match &options {
-                            Some(map) => match map.get("sign") {
-                                Some(v) => {
-                                    if verify(sign.message.as_bytes(), v.as_bytes(), sign.public_key.as_bytes()) {
-                                        if let Some(expire_duration) = access.expire_duration{
-                                            let expired_at = U64::from(env::block_timestamp() + expire_duration.0);
-                                            self.set_expired(expired_at);
-                                        }
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                },
-                                None => false
-                            },
-                            None => false
-                        }
+                if self.get_balance(&AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone()))) >= drip.amount_to_access.0 {
+                    if access.is_payment && drip.token_id.is_some() {
+                        self.decrease_balance(AssetKey::Drip((drip.token_id.clone(), drip.contract_id.clone())), drip.amount_to_access.0);
                     }
+                    true
+                } else {
+                    false
                 }
-                
+            },
+            Condition::SignCondition(sign_condition) => {
+                let options = options.unwrap();
+                let sign = options.get("sign").unwrap();
+                let timestamp: U64 = u64::from_str(options.get("timestamp").unwrap()).unwrap().into();
+                let message = self.account_id().to_string() + &sign_condition.message + &timestamp.0.to_string();
+                let can = match sign_condition.public_key.strip_prefix("0x") {
+                    Some(pk) => verify_secp256k1(message.as_bytes().to_vec(), sign.clone(), pk.to_string()),
+                    None => verify(message.as_bytes(), sign.as_bytes(), sign_condition.public_key.as_bytes())
+                };
+                if !can {
+                    return false
+                }
+
+                if let Some(expire_duration) = access.expire_duration{
+                    assert!(timestamp.0 + expire_duration.0 >= env::block_timestamp(), "signature expired");
+                    self.set_timestamp(access, timestamp);
+                }
+                self.set_signature(sign_condition.public_key.clone(), sign.clone(), timestamp);
+                true
             }
         }
     }
 
 
 
+}
+
+
+mod test {
+    use std::collections::HashMap;
+
+    use near_sdk::{json_types::U64, serde_json::{json, self}};
+
+    use crate::utils::{verify_secp256k1, verify};
+
+
+    #[test]
+    pub fn test() {
+        let v = u64::from(123123 as u32);
+        let msg = "hello";
+        let account_id = "5566".to_string();
+        let message = account_id + &msg + &v.to_string();
+        println!("{:?}", message);
+    }
+
+    #[test]
+    pub fn test_sign() {
+        let sign = "da6845aaf49973e77412d98cf1fe3e403a69d6ac22e84ce834ac9bacf9f27acc08af57a2c97b9e8471e699d94159add90f4d0047ff50b22454cd24e98e442c821c".to_string();
+        let message = "billkin.testnet has W0rdl3 #11693923940974000000".to_string();
+        let public_key = "313043dbb2679ec57f83a46d6675bca8d2cc9c109bc82a2160f86ece7eb6a4d972aaa43af2d38db68ed2d480ddc29d917294d40b29f92d7418884700bea361e2".to_string();
+        let mut pass = verify_secp256k1(message.as_bytes().to_vec(), sign.to_string(), public_key);
+        println!("{:?}", pass);
+    }
 }

@@ -47,11 +47,8 @@ impl Community {
         self.drip.get_account_decay(account_id)
     }
 
-    pub fn get_account(&self, account_id: AccountId) -> Option<HashMap<String, String>> {
-        match get_account_safe(&account_id).get_registered() {
-            Some(v) => Some(v.data),
-            None => None
-        }
+    pub fn get_account(&self, account_id: AccountId) -> HashMap<String, String> {
+        get_account_safe(&account_id).data
     }
 
     pub fn get_content_decay(&self, hierarchies: Vec<Hierarchy>) -> u32 {
@@ -93,12 +90,7 @@ impl Community {
     }
 
     pub fn get_balance(&self, account_id: AccountId, balance: AssetKey) -> U128{
-        match get_account_safe(&account_id).get_registered() {
-            Some(account) => {
-                account.get_balance(&balance).into()
-            },
-            None => 0.into()
-        }
+        get_account_safe(&account_id).get_balance(&balance).into()
     }
 
     // pub fn get_reports(&self, account_id: AccountId) -> Vec<Report> {
