@@ -333,7 +333,7 @@ impl Community {
         assert!(self.can_execute_action(None, None, Permission::AddProposal(have_action)), "not allowed");
 
         if have_action {
-            assert!(proposal.until.0 - proposal.begin.0 > 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
+            assert!(proposal.until.0 - proposal.begin.0 >= 1440 * 60 * 1000 * 1000000, "duration too small");   //1 day
         }
         let id_string= sender_id.to_string() + &json!(proposal).to_string();
         let id = bs58::encode(env::sha256(id_string.as_bytes())).into_string();

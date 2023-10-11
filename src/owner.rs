@@ -7,16 +7,16 @@ impl Community {
         self.args.clone()
     }
 
-    #[payable]
-    pub fn set_args(&mut self, args: HashMap<String, String>) {
-        assert_one_yocto();
-        let sender = get_predecessor_id();
-        assert!(sender == self.owner_id || 
-            get_parent_contract_id(env::current_account_id()) == get_predecessor_id() ||
-            env::current_account_id() == get_predecessor_id()
-        , "owner only");
-        self.args = args
-    }
+    // #[payable]
+    // pub fn set_args(&mut self, args: HashMap<String, String>) {
+    //     assert_one_yocto();
+    //     let sender = get_predecessor_id();
+    //     assert!(sender == self.owner_id || 
+    //         get_parent_contract_id(env::current_account_id()) == get_predecessor_id() ||
+    //         env::current_account_id() == get_predecessor_id()
+    //     , "owner only");
+    //     self.args = args
+    // }
 
     #[payable]
     pub fn set_owner(&mut self, account_id: AccountId) {

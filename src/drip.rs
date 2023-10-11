@@ -54,7 +54,7 @@ impl Drip {
     fn set_drip(&mut self, key: String, options: Option<HashMap<String, String>>, account_id: &AccountId, per: u32) -> Vec<(AccountId, String, U128)> {
         let total_drip = U256::from(get_map_value(&key));
         let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
-        let mut drip = total_drip.clone() * U256::from(100 as u128);
+        let mut drip = total_drip.clone() * per;
 
         if let Some(options) = options.clone() {
             if let Some(royalties) = options.get("drip_royalties") {
@@ -224,11 +224,13 @@ impl Drip {
 
 
 mod test {
-    use std::collections::HashMap;
+    use std::{collections::HashMap, str::FromStr, hash::Hash};
 
-    use near_sdk::{json_types::U128, AccountId, serde_json::json, serde_json};
+    use near_sdk::{json_types::U128, AccountId, serde_json::json, serde_json, env};
 
-    use super::{U256, get_map_value};
+    use crate::account::{self, Account};
+
+    use super::{U256, get_map_value, Drip};
 
 
     #[test]
@@ -255,5 +257,18 @@ mod test {
         
         let drip = (drip / U256::from(100 as u128)).as_u128();
         println!("{:?}", drip);
+    }
+
+    #[test]
+    pub fn decay() {
+        print!("{:?}", env::block_timestamp());
+        let account_id = AccountId::from_str("gugu2029.testnet").unwrap();
+        let mut account = Account::new(&account_id);
+        account.data.insert("content_count".to_string(), "13".to_string());
+        account.data.insert("one_day_timestamp".to_string(), "1697013468067413865".to_string());
+        let mut drip = Drip::new();
+        drip.accounts.insert(&account_id, &account);
+        drip.set_content_drip(vec![], account_id.clone(), None);
+        println!("{:?}", drip.accounts.get(&account_id).unwrap())
     }
 }
