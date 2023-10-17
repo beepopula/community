@@ -149,6 +149,9 @@ pub(crate) fn get_account(account_id: &AccountId) -> Account {
     match accounts.get(account_id) {
         Some(mut v) => {
             v.data.insert("account_id".to_string(), account_id.to_string());
+            if let AccessLimit::Free = get_access_limit() {
+                v.data.insert("registered".to_string(), json!(true).to_string());
+            }
             v
         },
         None => Account::new(account_id)
