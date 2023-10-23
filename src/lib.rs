@@ -116,12 +116,12 @@ impl Community {
             proposals: UnorderedMap::new(StorageKey::Proposals),
             access: AccessLimit::Registry
         };
-        let mut account = get_account(&owner_id);
+        let mut account = Account::new(&owner_id);
         account.set_registered(true);
         account.set_permanent(true);
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
         this.accounts.insert(&owner_id, &account);
-        let mut account = get_account(&env::current_account_id());
+        let mut account = Account::new(&env::current_account_id());
         account.set_registered(true);
         account.set_permanent(true);
         this.accounts.insert(&env::current_account_id(), &account);
@@ -276,10 +276,12 @@ impl Community {
     #[payable]
     pub fn withdraw(&mut self, asset: AssetKey, amount: U128) -> PromiseOrValue<()> {
         let sender_id = get_predecessor_id();
-        let account = get_account(&sender_id).registered();
+        let mut account = get_account(&sender_id).registered();
         assert!(account.get_balance(&asset).checked_sub(amount.0).is_some(), "not enough balance");
         let result = match &asset {
             AssetKey::FT(token_id) => {
+                account.decrease_balance(asset.clone(), amount.0);
+                set_account(&sender_id, &account);
                 if token_id.to_string() == "near" {
                     Promise::new(sender_id.clone()).transfer(amount.0).into()
                 } else {

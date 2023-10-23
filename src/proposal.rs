@@ -269,11 +269,12 @@ impl Proposal {
                 promise.into()
             }
             "transfer" => {
-                let community: Account = get_account(&env::current_account_id()).registered();
+                let mut community: Account = get_account(&env::current_account_id()).registered();
                 let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
                 match &args.asset {
                     AssetKey::FT(token_id) => {
-                        assert!(community.get_balance(&args.asset) >= args.amount.0, "not enough balance");
+                        community.decrease_balance(args.asset.clone(), args.amount.0);
+                        set_account(&env::current_account_id(), &community);
                         if token_id.to_string() == "near" {
                             Promise::new(args.receiver_id.clone()).transfer(args.amount.0).into()
                         } else {
@@ -408,17 +409,6 @@ impl Community {
         let result = match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
-                let mut community: Account = get_account(&env::current_account_id()).registered();
-                let status = proposal.get_status();
-                if let ProposalStatus::Result(index) = status {
-                    let option = proposal.options.get(index as usize).unwrap();
-                    if option.action_kind == "transfer".to_string() {
-                        let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
-                        community.decrease_balance(args.asset, args.amount.0);
-                        self.accounts.insert(&env::current_account_id(), &community);
-                    }
-                }
-
                 let access_key = SecretKey::from_bytes(&bs58::decode(proposal_id.clone()).into_vec().unwrap()).unwrap();
                 let pk: ed25519_dalek::PublicKey = (&access_key).into();
                 let public_key = PublicKey::try_from([vec![0], pk.as_bytes().to_vec()].concat()).unwrap();
@@ -428,6 +418,16 @@ impl Community {
             },
             PromiseResult::Failed => {
                 proposal.execution_status = ExecutionStatus::Failed;
+                let mut community: Account = get_account(&env::current_account_id()).registered();
+                let status = proposal.get_status();
+                if let ProposalStatus::Result(index) = status {
+                    let option = proposal.options.get(index as usize).unwrap();
+                    if option.action_kind == "transfer".to_string() {
+                        let args = serde_json::from_str::<Transfer>(&option.args).unwrap();
+                        community.increase_balance(args.asset, args.amount.0);
+                        self.accounts.insert(&env::current_account_id(), &community);
+                    }
+                }
                 PromiseOrValue::Value(())
             },
         };

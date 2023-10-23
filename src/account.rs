@@ -120,11 +120,8 @@ impl Account {
             data: HashMap::new(),
         };
         this.data.insert(ACCOUNT_ID.to_string(), account_id.to_string());
-        let mut registered = false;
-        if let AccessLimit::Free = get_access_limit() {
-            registered = true;
-        }
-        this.data.insert(REGISTERED.to_string(), json!(registered).to_string());
+
+        this.data.insert(REGISTERED.to_string(), json!(false).to_string());
         this.data.insert(DRIP.to_string(), 0.to_string());
         this.data.insert(ONE_DAY_TIMESTAMP.to_string(), env::block_timestamp().to_string());
         this.data.insert(CONTENT_COUNT.to_string(), 0.to_string());

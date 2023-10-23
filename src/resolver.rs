@@ -41,12 +41,12 @@ impl Community {
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
             PromiseResult::Successful(_) => {
-                let mut account = get_account(&account_id).registered();
-                account.decrease_balance(asset, amount.0);
-                set_account(&account_id, &account);
                 PromiseOrValue::Value(())
             },
             PromiseResult::Failed => {
+                let mut account = get_account(&account_id).registered();
+                account.increase_balance(asset, amount.0);
+                set_account(&account_id, &account);
                 PromiseOrValue::Value(())
             },
         };
