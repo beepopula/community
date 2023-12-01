@@ -55,7 +55,7 @@ impl Community {
         self.access = access;
     }
 
-    #[private]
+    #[private]  //TODO: open it?
     pub fn distribute(&mut self, list: Vec<(AccountId, AssetKey, U128)>) {
         let mut community = get_account(&env::current_account_id()).registered();
         for (account_id, asset, amount) in list {

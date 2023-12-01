@@ -65,26 +65,30 @@ pub(crate) fn get_root_id(contract_id: AccountId) -> AccountId {
 pub(crate) fn set<T>(key: &[u8], val: T) 
 where T: BorshSerialize + BorshDeserialize
 {
-    env::storage_write(key, &val.try_to_vec().unwrap());
+    env::storage_write(&key[0..16], &val.try_to_vec().unwrap());
 }
 
 pub(crate) fn get<T>(key: &[u8]) -> Option<T> 
 where T: BorshSerialize + BorshDeserialize
 {
-    match env::storage_read(key) {
-        Some(mut v) => {
+    match env::storage_read(&key[0..16]) {
+        Some(v) => {
             Some(BorshDeserialize::deserialize(&mut v.as_slice()).unwrap())
         },
-        None => None
+        None => match env::storage_read(key) {
+            Some(v) => Some(BorshDeserialize::deserialize(&mut v.as_slice()).unwrap()),
+            None => None
+        }
     }
 }
 
 pub(crate) fn check(key: &[u8]) -> bool {
-    env::storage_has_key(key)
+    env::storage_has_key(&key[0..16]) || env::storage_has_key(key)
 }
 
 pub(crate) fn remove(key: &[u8]) {
     env::storage_remove(key);
+    env::storage_remove(&key[0..16]);
 }
 
 pub(crate) fn check_and_set<T>(key: &[u8], val: T) -> bool 
