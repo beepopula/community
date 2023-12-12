@@ -192,7 +192,9 @@ impl Proposal {
         );
         let (vote, amount, index) = self.votes.get(account_id).unwrap();
         assert!(self.votes.get(&account_id).is_some(), "account not found");
-        assert!(amount.0 > 0, "already redeem");
+        if amount.0 == 0 {
+            return
+        }
         match &self.asset {
             Some(asset) => {
                 let mut account: Account = get_account(account_id).registered();

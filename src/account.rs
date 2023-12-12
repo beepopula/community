@@ -1,4 +1,6 @@
-use crate::{*, utils::{get_access_limit, verify_secp256k1}};
+use std::future::Pending;
+
+use crate::{*, utils::{get_access_limit, verify_secp256k1, get}};
 
 const ACCOUNT_ID: &str = "account_id";
 const REGISTERED: &str = "registered";
@@ -7,6 +9,7 @@ const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
 const TOTAL_CONTENT_COUNT: &str = "total_content_count";
 const PERMANENT: &str = "permanent";
+const EVENT: &str = "event";
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
@@ -385,9 +388,7 @@ impl Account {
                 true
             }
         }
-    }
-
-
+    } 
 
 }
 

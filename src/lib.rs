@@ -12,7 +12,7 @@ use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self, to_string, Value};
 use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue, sys};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
-use drip::{Drip};
+use drip::{Drip, PendingDrip};
 use proposal::{Proposal, FunctionCall, ActionCall};
 use role::{RoleManagement, OldRoleManagement};
 use uint::hex;
@@ -214,14 +214,9 @@ impl Community {
             None => {
                 let account = Account::new(&sender_id);
                 if let Some(inviter_id) = inviter_id {
-                    let drips = self.drip.set_invite_drip(inviter_id.clone(), sender_id.clone());
-                    Event::log_invite(
-                        inviter_id, 
-                        sender_id.clone(), 
-                        Some(json!({
-                            "drips": drips
-                        }).to_string())
-                    )
+                    let pending_id = env::sha256((inviter_id.to_string() + "invite" + &sender_id.to_string()).as_bytes());
+                    let pending_id = bs58::decode(pending_id).into_vec().unwrap();
+                    let pending = PendingDrip::Draw(10, 20);
                 }
                 account
             }
@@ -333,58 +328,68 @@ impl Community {
         );
     }
 
-    pub fn decode(&mut self, id: String, public_key: String, action: ActionCall, sign: String, timestamp: U64) -> Option<String> {
-        Promise::new(env::signer_account_id()).function_call("on_callback".to_string(), json!({}).to_string().into_bytes(), 0, env::prepaid_gas() / 3);
-        let timestamp = u64::from(timestamp);
-        assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
-        let message = (public_key.to_string() + &json!(action).to_string() + &timestamp.to_string()).as_bytes().to_vec();
-        let account_id = get_account_id(id, message, sign, public_key);
-        let register_account_id = account_id.try_to_vec().unwrap();
-        let args_map = match serde_json::from_str(&action.args).unwrap() {
-            Value::Object(map) => map,
-            _ => panic!("invalid args")
-        };
-        unsafe {
-            sys::write_register(PREDECESSOR_REGISTER, register_account_id.len() as u64, register_account_id.as_ptr() as u64);
-        }
-        match action.method_name.as_str() {
-            "agree_rules" => {
-                None
-            },
-            "add_content" => {
-                let args = args_map.get("args").unwrap().to_string();
-                let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
-                let options = match args_map.get("options") {
-                    Some(v) => Some(serde_json::from_str::<HashMap<String, String>>(&v.to_string()).unwrap()),
-                    None => None
-                };
-                Some(String::from(&self.add_content(args, hierarchies, options)))
-            },
-            "like" => {
-                let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
-                self.like(hierarchies);
-                None
-            },
-            // "unlike" => {
-            //     let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
-            //     self.unlike(hierarchies);
-            //     None
-            // },
-            "add_proposal" => {
-                let proposal = serde_json::from_str::<ProposalInput>(&args_map.get("proposal").unwrap().to_string()).unwrap();
-                Some(self.add_proposal(proposal))
-            },
-            "vote" => {
-                let id = args_map.get("id").unwrap().to_string();
-                let vote = serde_json::from_str::<u32>(&args_map.get("vote").unwrap().to_string()).unwrap();
-                let amount = serde_json::from_str::<U128>(&args_map.get("amount").unwrap().to_string()).unwrap();
-                self.vote(id, vote, amount);
-                None
-            },
-            _ => panic!("not support")
-        }
-        
+    pub fn resolve_pending_drip(&mut self, reason: String, extra: String) {
+        let sender_id = get_predecessor_id();
+        let drips = self.drip.set_pending_drip(sender_id, reason, extra);
+        Event::log_other(
+            Some(json!({
+                "drips": drips
+            }).to_string())
+        )
     }
+
+    // pub fn decode(&mut self, id: String, public_key: String, action: ActionCall, sign: String, timestamp: U64) -> Option<String> {
+    //     Promise::new(env::signer_account_id()).function_call("on_callback".to_string(), json!({}).to_string().into_bytes(), 0, env::prepaid_gas() / 3);
+    //     let timestamp = u64::from(timestamp);
+    //     assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
+    //     let message = (public_key.to_string() + &json!(action).to_string() + &timestamp.to_string()).as_bytes().to_vec();
+    //     let account_id = get_account_id(id, message, sign, public_key);
+    //     let register_account_id = account_id.try_to_vec().unwrap();
+    //     let args_map = match serde_json::from_str(&action.args).unwrap() {
+    //         Value::Object(map) => map,
+    //         _ => panic!("invalid args")
+    //     };
+    //     unsafe {
+    //         sys::write_register(PREDECESSOR_REGISTER, register_account_id.len() as u64, register_account_id.as_ptr() as u64);
+    //     }
+    //     match action.method_name.as_str() {
+    //         "agree_rules" => {
+    //             None
+    //         },
+    //         "add_content" => {
+    //             let args = args_map.get("args").unwrap().to_string();
+    //             let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
+    //             let options = match args_map.get("options") {
+    //                 Some(v) => Some(serde_json::from_str::<HashMap<String, String>>(&v.to_string()).unwrap()),
+    //                 None => None
+    //             };
+    //             Some(String::from(&self.add_content(args, hierarchies, options)))
+    //         },
+    //         "like" => {
+    //             let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
+    //             self.like(hierarchies);
+    //             None
+    //         },
+    //         // "unlike" => {
+    //         //     let hierarchies = serde_json::from_str::<Vec<Hierarchy>>(&args_map.get("hierarchies").unwrap().to_string()).unwrap();
+    //         //     self.unlike(hierarchies);
+    //         //     None
+    //         // },
+    //         "add_proposal" => {
+    //             let proposal = serde_json::from_str::<ProposalInput>(&args_map.get("proposal").unwrap().to_string()).unwrap();
+    //             Some(self.add_proposal(proposal))
+    //         },
+    //         "vote" => {
+    //             let id = args_map.get("id").unwrap().to_string();
+    //             let vote = serde_json::from_str::<u32>(&args_map.get("vote").unwrap().to_string()).unwrap();
+    //             let amount = serde_json::from_str::<U128>(&args_map.get("amount").unwrap().to_string()).unwrap();
+    //             self.vote(id, vote, amount);
+    //             None
+    //         },
+    //         _ => panic!("not support")
+    //     }
+        
+    // }
 }
 
 

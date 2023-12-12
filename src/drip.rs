@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref};
 
-use crate::{*, utils::set_account};
+use crate::{*, utils::{set_account, get}};
 use account::Account;
 use post::Hierarchy;
 use uint::construct_uint;
@@ -9,6 +9,15 @@ construct_uint! {
     /// 256-bit unsigned integer.
     pub struct U256(4);
 }
+
+#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(Debug, Clone)]
+pub enum PendingDrip {
+    Draw(u8, u8)  //between..to  integer
+}
+
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Debug)]
@@ -157,13 +166,13 @@ impl Drip {
         self.set_drip(key, None, &account_id, 100)
     }
 
-    pub fn set_invite_drip(&mut self, inviter_id: AccountId, invitee_id: AccountId) -> Vec<(AccountId, String, U128)> {
-        if inviter_id == invitee_id {
-            return vec![]
-        }
-        let key = "invite".to_string();
-        self.set_drip(key, None, &inviter_id, 100)
-    }
+    // pub fn set_invite_drip(&mut self, inviter_id: AccountId, invitee_id: AccountId) -> Vec<(AccountId, String, U128)> {
+    //     if inviter_id == invitee_id {
+    //         return vec![]
+    //     }
+    //     let key = "invite".to_string();
+    //     self.set_drip(key, None, &inviter_id, 100)
+    // }
 
     pub fn set_vote_drip(&mut self, voter_id: AccountId, amount: u128) -> Vec<(AccountId, String, U128)> {
         let key = "vote".to_string();
@@ -193,6 +202,18 @@ impl Drip {
         vec![(to, "gather".to_string(), amount.into())]
     }
 
+    pub fn set_pending_drip(&self, account_id: AccountId, reason: String, extra: String) -> Vec<(AccountId, String, U128)> {
+        let id = env::sha256((account_id.to_string() + &reason + &extra).as_bytes());
+        let id = bs58::decode(id).into_vec().unwrap();
+        match get::<PendingDrip>(&id) {
+            Some(pending) => {
+                let amount = resolve_pending(pending);
+                vec![(account_id, reason, amount.into())]
+            },
+            None => vec![]
+        }
+    } 
+
     pub fn get_and_clear_drip(&mut self, account_id: AccountId) -> U128 {
         let mut account = get_account(&account_id).registered();
         let balance = account.get_drip();
@@ -221,6 +242,17 @@ impl Drip {
     }
 }
 
+
+fn resolve_pending(pending: PendingDrip) -> u128 {
+    match pending {
+        PendingDrip::Draw(from, to) => {
+            let r = u128::from_be_bytes(env::random_seed()[0..16].try_into().unwrap());
+            let mut v = (r % (from - to) as u128) + from as u128;
+            v = v * 1000000000000000000000000;
+            v
+        }
+    }
+}
 
 
 mod test {
