@@ -202,8 +202,8 @@ impl Drip {
         vec![(to, "gather".to_string(), amount.into())]
     }
 
-    pub fn set_pending_drip(&self, account_id: AccountId, reason: String, extra: String) -> Vec<(AccountId, String, U128)> {
-        let id = env::sha256((account_id.to_string() + &reason + &extra).as_bytes());
+    pub fn set_pending_drip(&self, account_id: AccountId, reason: String, option: String) -> Vec<(AccountId, String, U128)> {
+        let id = env::sha256((account_id.to_string() + &reason + &option).as_bytes());
         let id = bs58::decode(id).into_vec().unwrap();
         match get::<PendingDrip>(&id) {
             Some(pending) => {

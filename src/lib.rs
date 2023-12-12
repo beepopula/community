@@ -328,9 +328,9 @@ impl Community {
         );
     }
 
-    pub fn resolve_pending_drip(&mut self, reason: String, extra: String) {
+    pub fn resolve_pending_drip(&mut self, reason: String, option: String) {
         let sender_id = get_predecessor_id();
-        let drips = self.drip.set_pending_drip(sender_id, reason, extra);
+        let drips = self.drip.set_pending_drip(sender_id, reason, option);
         Event::log_other(
             Some(json!({
                 "drips": drips
