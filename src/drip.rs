@@ -201,13 +201,20 @@ impl Drip {
         set_account(&to, &to_account);
         vec![(to, "gather".to_string(), amount.into())]
     }
+    
 
-    pub fn set_pending_drip(&self, account_id: AccountId, reason: String, option: String) -> Vec<(AccountId, String, U128)> {
+    pub fn add_pending_drip(&mut self, account_id: AccountId, reason: String, option: String, pending_drip: PendingDrip) -> Vec<(AccountId, String, String)> {
         let id = env::sha256((account_id.to_string() + &reason + &option).as_bytes());
-        let id = bs58::decode(id).into_vec().unwrap();
+        set::<PendingDrip>(&id, pending_drip);
+        vec![(account_id, "invite".to_string(), option)]
+    }
+
+    pub fn set_pending_drip(&mut self, account_id: AccountId, reason: String, option: String) -> Vec<(AccountId, String, U128)> {
+        let id = env::sha256((account_id.to_string() + &reason + &option).as_bytes());
         match get::<PendingDrip>(&id) {
             Some(pending) => {
                 let amount = resolve_pending(pending);
+                remove(&id);
                 vec![(account_id, reason, amount.into())]
             },
             None => vec![]
@@ -247,7 +254,7 @@ fn resolve_pending(pending: PendingDrip) -> u128 {
     match pending {
         PendingDrip::Draw(from, to) => {
             let r = u128::from_be_bytes(env::random_seed()[0..16].try_into().unwrap());
-            let mut v = (r % (from - to) as u128) + from as u128;
+            let mut v = (r % (to - from) as u128) + from as u128;
             v = v * 1000000000000000000000000;
             v
         }

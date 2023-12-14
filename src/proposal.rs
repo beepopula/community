@@ -26,6 +26,7 @@ pub enum ProposalStatus {
 #[serde(crate = "near_sdk::serde")]
 pub enum ExecutionStatus {
     NotStart,
+    Executing,
     Failed,
     Finished
 }
@@ -255,7 +256,8 @@ impl Proposal {
         proposal_id: String,
         option: Opt
     ) -> PromiseOrValue<()> {
-        assert!(self.execution_status != ExecutionStatus::Finished, "already executed");
+        assert!(self.execution_status == ExecutionStatus::NotStart, "executing or already executed");
+        self.execution_status = ExecutionStatus::Executing;
         let result = match option.action_kind.as_str() {
             "functionCall" => {
                 let args = serde_json::from_str::<FunctionCall>(&option.args).unwrap();

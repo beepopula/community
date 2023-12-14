@@ -214,9 +214,12 @@ impl Community {
             None => {
                 let account = Account::new(&sender_id);
                 if let Some(inviter_id) = inviter_id {
-                    let pending_id = env::sha256((inviter_id.to_string() + "invite" + &sender_id.to_string()).as_bytes());
-                    let pending_id = bs58::decode(pending_id).into_vec().unwrap();
-                    let pending = PendingDrip::Draw(10, 20);
+                    let pending_drips = self.drip.add_pending_drip(inviter_id, "invite".to_string(), sender_id.to_string(), PendingDrip::Draw(10, 20));
+                    Event::log_other(
+                        Some(json!({
+                            "pending_drips": pending_drips
+                        }).to_string())
+                    );
                 }
                 account
             }
