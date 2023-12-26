@@ -60,18 +60,8 @@ impl Community {
         init_callback();
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
-        let mut check_encryption_content_permission = false;
-        if let Some(options) = options.clone() {
-            if options.contains_key("access") {
-                check_encryption_content_permission = true
-            } 
-        } 
 
-        if check_encryption_content_permission {
-            assert!(self.can_execute_action(None, None, Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
-        } else {
-            assert!(self.can_execute_action(None, None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
-        }
+        assert!(self.can_execute_action(None, None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
 
         assert!(hierarchies.len() < MAX_LEVEL, "error");
 

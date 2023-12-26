@@ -15,7 +15,7 @@ construct_uint! {
 #[serde(crate = "near_sdk::serde")]
 #[derive(Debug, Clone)]
 pub enum PendingDrip {
-    Draw(u8, u8)  //between..to  integer
+    Draw(Vec<u8>)  //between..to  integer
 }
 
 
@@ -83,15 +83,29 @@ impl Drip {
         let mut account = get_account(&account_id);
         let drip = (drip / U256::from(100 as u128)).as_u128();
         account.increase_drip(drip);
+        self.cum_active_drip(drip);
         set_account(&account_id, &account);
         drip_items.push((account_id.clone(), key, drip.into()));
         drip_items
     }
 
-    fn set_custom_drip(&mut self, key: String, account_id: &AccountId, amount: u128) -> Vec<(AccountId, String, U128)> {
+    fn cum_active_drip(&mut self, drip: u128) {
+        let asset = AssetKey::Drip((Some(AccountId::from_str("active").unwrap()), env::current_account_id()));
+        let mut account = get_account(&env::current_account_id());
+        let total_drip = account.get_balance(&asset);
+        if let Some(new_total_drip) = total_drip.checked_add(drip) {
+            account.increase_balance(asset, drip);
+        }
+        self.accounts.insert(&env::current_account_id(), &account);
+    }
+
+    pub fn set_custom_drip(&mut self, key: String, account_id: &AccountId, amount: u128, active_drip: bool) -> Vec<(AccountId, String, U128)> {
         let mut account = get_account(&account_id);
         let drip = amount;
         account.increase_drip(drip);
+        if active_drip {
+            self.cum_active_drip(drip);
+        }
         set_account(&account_id, &account);
         let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
         drip_items.push((account_id.clone(), key, drip.into()));
@@ -174,10 +188,10 @@ impl Drip {
     //     self.set_drip(key, None, &inviter_id, 100)
     // }
 
-    pub fn set_vote_drip(&mut self, voter_id: AccountId, amount: u128) -> Vec<(AccountId, String, U128)> {
-        let key = "vote".to_string();
-        self.set_custom_drip(key, &voter_id, amount)
-    }
+    // pub fn set_vote_drip(&mut self, voter_id: AccountId, amount: u128) -> Vec<(AccountId, String, U128)> {
+    //     let key = "vote".to_string();
+    //     self.set_custom_drip(key, &voter_id, amount)
+    // }
 
     pub fn set_proposal_drip(&mut self, proposer_id: AccountId, account_id: AccountId) -> Vec<(AccountId, String, U128)> {
         if proposer_id == account_id {
@@ -252,9 +266,9 @@ impl Drip {
 
 fn resolve_pending(pending: PendingDrip) -> u128 {
     match pending {
-        PendingDrip::Draw(from, to) => {
-            let r = u128::from_be_bytes(env::random_seed()[0..16].try_into().unwrap());
-            let mut v = (r % (to - from) as u128) + from as u128;
+        PendingDrip::Draw(items) => {
+            let r = usize::from_be_bytes(env::random_seed()[0..16].try_into().unwrap());
+            let mut v = items[r % items.len()] as u128;
             v = v * 1000000000000000000000000;
             v
         }

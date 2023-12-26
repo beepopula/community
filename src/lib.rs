@@ -5,12 +5,13 @@ use std::str::FromStr;
 
 use account::{Account, OldAccess};
 use events::Event;
+use internal::Instruction;
 use near_contract_standards::fungible_token::core::ext_ft_core;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self, to_string, Value};
-use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue, sys};
+use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue, sys, PromiseResult};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip, PendingDrip};
 use proposal::{Proposal, FunctionCall, ActionCall};
@@ -214,7 +215,7 @@ impl Community {
             None => {
                 let account = Account::new(&sender_id);
                 if let Some(inviter_id) = inviter_id {
-                    let pending_drips = self.drip.add_pending_drip(inviter_id, "invite".to_string(), sender_id.to_string(), PendingDrip::Draw(10, 20));
+                    let pending_drips = self.drip.add_pending_drip(inviter_id, "invite".to_string(), sender_id.to_string(), PendingDrip::Draw(vec![10,11,12,13,14,15,20]));
                     Event::log_other(
                         Some(json!({
                             "pending_drips": pending_drips
@@ -273,6 +274,7 @@ impl Community {
 
     #[payable]
     pub fn withdraw(&mut self, asset: AssetKey, amount: U128) -> PromiseOrValue<()> {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
         let mut account = get_account(&sender_id).registered();
         assert!(account.get_balance(&asset).checked_sub(amount.0).is_some(), "not enough balance");
@@ -289,6 +291,7 @@ impl Community {
             AssetKey::NFT(_, _) => PromiseOrValue::Value(()),
             AssetKey::Drip(_) => PromiseOrValue::Value(())
         };
+        set_storage_usage(initial_storage_usage, None);
         match result {
             PromiseOrValue::Promise(promise) => promise
                 .then(
@@ -300,9 +303,11 @@ impl Community {
 
     #[payable]
     pub fn donate(&mut self) {
+        let initial_storage_usage = env::storage_usage();
         let mut account = get_account(&env::current_account_id()).registered();
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         set_account(&env::current_account_id(), &account);
+        set_storage_usage(initial_storage_usage, None);
     }
 
     #[payable]
@@ -317,13 +322,14 @@ impl Community {
     // #[cfg(feature = "unstable")]
     pub fn gather_drip_from_non_near_account(&mut self, id: String, public_key: String, sign: String, timestamp: U64) {
         assert_one_yocto();
+        let initial_storage_usage = env::storage_usage();
         let timestamp = u64::from(timestamp);
         assert!(env::block_timestamp() - timestamp < 120_000_000_000, "signature expired");
         let sender_id = env::signer_account_id();
         let message = (sender_id.to_string() + &timestamp.to_string()).as_bytes().to_vec();
         let non_near_account_id = get_account_id(id, message, sign, public_key);
         let drips = self.drip.gather_drip(non_near_account_id.clone(), sender_id.clone());
-
+        set_storage_usage(initial_storage_usage, None);
         Event::log_other(
             Some(json!({
                 "drips": drips
@@ -332,13 +338,47 @@ impl Community {
     }
 
     pub fn resolve_pending_drip(&mut self, reason: String, option: String) {
+        let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
         let drips = self.drip.set_pending_drip(sender_id, reason, option);
+        set_storage_usage(initial_storage_usage, None);
         Event::log_other(
             Some(json!({
                 "drips": drips
             }).to_string())
         )
+    }
+
+    #[payable]
+    pub fn call(&mut self, to: AccountId, method_name: String, args: String, read_accounts: Vec<AccountId>) {
+        let sender_id = get_predecessor_id();
+        let mut final_args = HashMap::new();
+        final_args.insert("args".to_string(), args);
+        final_args.insert("sender_id".to_string(), sender_id.to_string());
+        let mut accounts = HashMap::new();
+        accounts.insert(sender_id.to_string(), json!(get_account(&sender_id).data).to_string());
+        for account_id in read_accounts {
+            accounts.insert(account_id.to_string(), json!(get_account(&account_id).data).to_string());
+        }
+        final_args.insert("accounts".to_string(), json!(accounts).to_string());
+        Promise::new(to).function_call(method_name, json!(final_args).to_string().into_bytes(), env::attached_deposit(), env::prepaid_gas() / 3).then(
+            Community::ext(env::current_account_id()).on_call(sender_id)
+        );
+    }
+
+    #[private]
+    pub fn on_call(&mut self, sender_id: AccountId) {
+        match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Successful(v) => {
+                let instructions: Vec<Instruction> = BorshDeserialize::deserialize(&mut v.as_slice()).unwrap();
+                self.internal_execute_instructions(sender_id, instructions);
+                PromiseOrValue::Value(())
+            },
+            PromiseResult::Failed => {
+                PromiseOrValue::Value(())
+            },
+        };
     }
 
     // pub fn decode(&mut self, id: String, public_key: String, action: ActionCall, sign: String, timestamp: U64) -> Option<String> {

@@ -26,7 +26,6 @@ pub enum ProposalStatus {
 #[serde(crate = "near_sdk::serde")]
 pub enum ExecutionStatus {
     NotStart,
-    Executing,
     Failed,
     Finished
 }
@@ -257,7 +256,7 @@ impl Proposal {
         option: Opt
     ) -> PromiseOrValue<()> {
         assert!(self.execution_status == ExecutionStatus::NotStart, "executing or already executed");
-        self.execution_status = ExecutionStatus::Executing;
+        self.execution_status = ExecutionStatus::Finished;
         let result = match option.action_kind.as_str() {
             "functionCall" => {
                 let args = serde_json::from_str::<FunctionCall>(&option.args).unwrap();
@@ -450,7 +449,7 @@ impl Community {
             let voter = proposal.votes.get(&sender_id).unwrap();
             let base_drip = U128::from(get_map_value(&"vote".to_string())).0;
             drips.extend(match proposal.get_status() {
-                ProposalStatus::Expired => self.drip.set_vote_drip(sender_id, base_drip),
+                ProposalStatus::Expired => self.drip.set_custom_drip("vote".to_string(), &sender_id, base_drip, true),
                 ProposalStatus::Result(option) => {
                     if option == voter.0 {       //bonus
                         let total_drips = proposal.votes.len() as u128 * base_drip;
@@ -465,7 +464,7 @@ impl Community {
                         } else {
                             amount_per_account += rest_drips * 2 / 10 / ((opt.accounts.0 - index_threshold) as u128);
                         }
-                        self.drip.set_vote_drip(sender_id, amount_per_account)
+                        self.drip.set_custom_drip("vote".to_string(), &sender_id, amount_per_account, true)
                     } else {
                         vec![]
                     }

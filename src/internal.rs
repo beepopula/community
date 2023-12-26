@@ -1,5 +1,14 @@
+use crate::utils::get_root_id;
 use crate::{utils::get_content_hash};
 use crate::*;
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(crate = "near_sdk::serde")]
+#[derive(BorshDeserialize, BorshSerialize, BorshStorageKey)]
+pub enum Instruction {
+    Write(HashMap<String, String>),
+    Drip(Vec<(AccountId, String, U128)>)
+}
 
 impl Community {
     pub(crate) fn internal_report(&mut self, sender_id: AccountId, hierarchies: Vec<Hierarchy>) {
@@ -36,5 +45,29 @@ impl Community {
         }
         
         set_storage_usage(initial_storage_usage, None);
+    }
+
+    pub(crate) fn internal_execute_instructions(&mut self, account_id: AccountId, instructions: Vec<Instruction>) {
+        let mut account = get_account(&account_id);
+        for instruction in instructions {
+            match instruction {
+                Instruction::Write(map) => {
+                    account.data.insert(get_predecessor_id().to_string(), json!(map).to_string());
+                },
+                Instruction::Drip(drips) => {
+                    if get_root_id(env::current_account_id()) == get_root_id(get_predecessor_id()) {
+                        for (account_id, key, amount) in drips.clone() {
+                            self.drip.set_custom_drip(key, &account_id, amount.0, false);
+                        }
+                        Event::log_other(
+                            Some(json!({
+                                "drips": drips
+                            }).to_string())
+                        )
+                    }
+                }
+            }
+        }
+        set_account(&account_id, &account)
     }
 }
