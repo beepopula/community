@@ -21,7 +21,7 @@ use utils::{refund_extra_storage_deposit, set, remove, set_storage_usage, get_ac
 use crate::post::Hierarchy;
 use crate::proposal::ProposalInput;
 use crate::role::Role;
-use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, get_predecessor_id};
+use crate::utils::{get_arg, get_access_limit, verify, from_rpc_sig, get_predecessor_id, get_root_id};
 use std::convert::TryFrom;
 use role::Permission;
 use account::AssetKey;
@@ -119,65 +119,72 @@ impl Community {
         };
         let mut account = Account::new(&owner_id);
         account.set_registered(true);
-        account.set_permanent(true);
+        account.set_timestamp(None, u64::MAX.into());
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), JOIN_DEPOSIT);
         this.accounts.insert(&owner_id, &account);
         let mut account = Account::new(&env::current_account_id());
         account.set_registered(true);
-        account.set_permanent(true);
+        account.set_timestamp(None, u64::MAX.into());
         this.accounts.insert(&env::current_account_id(), &account);
         this
     }
 
-    #[init(ignore_state)]
-    pub fn migrate() -> Self {
+    // #[init(ignore_state)]
+    // pub fn migrate() -> Self {
 
-        let old_this: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
-        assert!(get_predecessor_id() == old_this.owner_id || get_predecessor_id() == env::current_account_id(), "owner only");
+    //     let old_this: OldCommunity = env::state_read().expect("ERR_NOT_INITIALIZED");
+    //     assert!(get_predecessor_id() == old_this.owner_id || get_predecessor_id() == env::current_account_id(), "owner only");
         
-        let mut global_permissions = HashMap::new();
-        global_permissions.insert(Permission::AddContent(0), (Relationship::Or, None));
-        global_permissions.insert(Permission::AddContent(1), (Relationship::Or, None));
-        global_permissions.insert(Permission::AddContent(2), (Relationship::Or, None));
-        global_permissions.insert(Permission::DelContent, (Relationship::Or, None));
-        global_permissions.insert(Permission::AddEncryptContent(0), (Relationship::Or, None));
-        global_permissions.insert(Permission::AddEncryptContent(1), (Relationship::Or, None));
-        global_permissions.insert(Permission::AddEncryptContent(2), (Relationship::Or, None));
-        global_permissions.insert(Permission::DelEncryptContent, (Relationship::Or, None));
-        global_permissions.insert(Permission::Like, (Relationship::Or, None));
-        global_permissions.insert(Permission::Unlike, (Relationship::Or, None));
-        global_permissions.insert(Permission::Report, (Relationship::Or, None));
-        global_permissions.insert(Permission::Vote, (Relationship::Or, None));
-        global_permissions.insert(Permission::AddProposal(false), (Relationship::Or, None));
+    //     let mut global_permissions = HashMap::new();
+    //     global_permissions.insert(Permission::AddContent(0), (Relationship::Or, None));
+    //     global_permissions.insert(Permission::AddContent(1), (Relationship::Or, None));
+    //     global_permissions.insert(Permission::AddContent(2), (Relationship::Or, None));
+    //     global_permissions.insert(Permission::DelContent, (Relationship::Or, None));
+    //     global_permissions.insert(Permission::AddEncryptContent(0), (Relationship::Or, None));
+    //     global_permissions.insert(Permission::AddEncryptContent(1), (Relationship::Or, None));
+    //     global_permissions.insert(Permission::AddEncryptContent(2), (Relationship::Or, None));
+    //     global_permissions.insert(Permission::DelEncryptContent, (Relationship::Or, None));
+    //     global_permissions.insert(Permission::Like, (Relationship::Or, None));
+    //     global_permissions.insert(Permission::Unlike, (Relationship::Or, None));
+    //     global_permissions.insert(Permission::Report, (Relationship::Or, None));
+    //     global_permissions.insert(Permission::Vote, (Relationship::Or, None));
+    //     global_permissions.insert(Permission::AddProposal(false), (Relationship::Or, None));
 
-        global_permissions.insert(Permission::AddProposal(true), (Relationship::And, None));
-        global_permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
-        global_permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
-        global_permissions.insert(Permission::SetRole(None), (Relationship::And, None));
-        global_permissions.insert(Permission::DelRole(None), (Relationship::And, None));
-        global_permissions.insert(Permission::AddMember(None), (Relationship::And, None));
-        global_permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
-        global_permissions.insert(Permission::Other(None), (Relationship::And, None));
+    //     global_permissions.insert(Permission::AddProposal(true), (Relationship::And, None));
+    //     global_permissions.insert(Permission::ReportConfirm, (Relationship::And, None));
+    //     global_permissions.insert(Permission::DelOthersContent, (Relationship::And, None));
+    //     global_permissions.insert(Permission::SetRole(None), (Relationship::And, None));
+    //     global_permissions.insert(Permission::DelRole(None), (Relationship::And, None));
+    //     global_permissions.insert(Permission::AddMember(None), (Relationship::And, None));
+    //     global_permissions.insert(Permission::RemoveMember(None), (Relationship::And, None));
+    //     global_permissions.insert(Permission::Other(None), (Relationship::And, None));
 
-        let this = Community {
-            owner_id: old_this.owner_id,
-            args: old_this.args,
-            accounts: old_this.accounts,
-            reports: old_this.reports,
-            drip: old_this.drip,
-            role_management: RoleManagement {
-                roles: old_this.role_management.roles,
-                global_role: global_permissions
-            },
-            proposals: old_this.proposals,
-            access: match old_this.access {
-                OldAccessLimit::TokenLimit(_) => AccessLimit::Registry,
-                OldAccessLimit::Registry => AccessLimit::Registry,
-                OldAccessLimit::Free => AccessLimit::Free
-            }
-        };
-        env::state_write::<Community>(&this);
-        this
+    //     let this = Community {
+    //         owner_id: old_this.owner_id,
+    //         args: old_this.args,
+    //         accounts: old_this.accounts,
+    //         reports: old_this.reports,
+    //         drip: old_this.drip,
+    //         role_management: RoleManagement {
+    //             roles: old_this.role_management.roles,
+    //             global_role: global_permissions
+    //         },
+    //         proposals: old_this.proposals,
+    //         access: match old_this.access {
+    //             OldAccessLimit::TokenLimit(_) => AccessLimit::Registry,
+    //             OldAccessLimit::Registry => AccessLimit::Registry,
+    //             OldAccessLimit::Free => AccessLimit::Free
+    //         }
+    //     };
+    //     env::state_write::<Community>(&this);
+    //     this
+    // }
+
+    #[payable]
+    pub fn set_access_limit(&mut self, access: AccessLimit) {
+        assert_one_yocto();
+        self.can_execute_action(None, None, Permission::SetRole(None));
+        self.access = access;
     }
 
     pub fn follow(&mut self, account_id: AccountId) {
@@ -201,6 +208,7 @@ impl Community {
     
     #[payable]
     pub fn join(&mut self, account_id: Option<AccountId>, inviter_id: Option<AccountId>, options: Option<HashMap<String, String>>) {
+        init_callback();
         if let AccessLimit::Free = self.access {
             return
         }
@@ -225,19 +233,25 @@ impl Community {
                 account
             }
         };
-        let near_deposit = account.get_balance(&AssetKey::FT(AccountId::from_str("near").unwrap()));
-        if near_deposit == 0 {
-            assert!(env::attached_deposit() >= JOIN_DEPOSIT, "not enough deposit");
-        }
+        // let near_deposit = account.get_balance(&AssetKey::FT(AccountId::from_str("near").unwrap()));
+        // if near_deposit == 0 {
+        //     // assert!(env::attached_deposit() >= JOIN_DEPOSIT, "not enough deposit");
+        // }
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         
         if self.can_execute_action(None, None, Permission::SetRole(None)) {
             account.set_registered(true);
-            account.set_permanent(true);
+            let options = options.unwrap();
+            let timestamp: U64 = u64::from_str(options.get("timestamp").unwrap()).unwrap().into();
+            account.set_timestamp(None, timestamp);
+            // account.set_permanent(true);
         } else {
             match self.access.clone() {
-                AccessLimit::Free => {},
-                AccessLimit::Registry => account.set_registered(true),
+                AccessLimit::Free => {assert!(options.is_none(), "options are not allowed")},
+                AccessLimit::Registry => {
+                    assert!(options.is_none(), "options are not allowed");
+                    account.set_registered(true)
+                },
                 AccessLimit::TokenLimit(access) => {
                     assert!(account.set_condition(&access, options), "not allowed");
                     account.set_registered(true)
@@ -281,7 +295,7 @@ impl Community {
         let result = match &asset {
             AssetKey::FT(token_id) => {
                 account.decrease_balance(asset.clone(), amount.0);
-                set_account(&sender_id, &account);
+                set_account(&account);
                 if token_id.to_string() == "near" {
                     Promise::new(sender_id.clone()).transfer(amount.0).into()
                 } else {
@@ -306,7 +320,7 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let mut account = get_account(&env::current_account_id()).registered();
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
-        set_account(&env::current_account_id(), &account);
+        set_account(&account);
         set_storage_usage(initial_storage_usage, None);
     }
 
@@ -349,37 +363,87 @@ impl Community {
         )
     }
 
+    // pub fn stake(&mut self, contract_id: AccountId) {
+    //     let sender_id = get_predecessor_id();
+    //     let mut instructions = vec![];
+    //     for account_id in vec![sender_id, env::current_account_id()] {
+    //         let account = get_account(&account_id);
+    //         let staking = account.get_data(&get_predecessor_id().to_string()).unwrap_or(HashMap::new());
+    //         let mut staking = Account::from_data(staking);
+    //         let reward = staking.get_data("reward").unwrap_or(HashMap::new());
+    //         staking.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+            
+    //         instructions.push(Instruction::Write((account_id, staking.data)));
+    //     }
+    //     Promise::new(contract_id).function_call("stake".to_string(), json!({}).to_string().as_bytes().to_vec(), env::attached_deposit(), env::prepaid_gas() / 3).then(
+    //         Community::ext(env::current_account_id()).on_call(instructions)
+    //     );
+    // }
+
+    // pub fn unstake(&mut self, contract_id: AccountId) {
+    //     let sender_id = get_predecessor_id();
+    //     let mut instructions = vec![];
+    //     for account_id in vec![env::current_account_id(), sender_id] {
+    //         let account = get_account(&account_id);
+    //         let staking = account.get_data(&get_predecessor_id().to_string()).unwrap_or(HashMap::new());
+    //         let mut staking = Account::from_data(staking);
+    //         staking.decrease_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
+    //         instructions.push(Instruction::Write((account_id, staking.data)));
+    //     }
+    //     Promise::new(contract_id).function_call("unstake".to_string(), json!({}).to_string().as_bytes().to_vec(), env::attached_deposit(), env::prepaid_gas() / 3).then(
+    //         Community::ext(env::current_account_id()).on_call(instructions)
+    //     );
+    // }
+
+    // pub fn reward(&mut self, contract_id: AccountId) {
+        
+    // }
+
     #[payable]
-    pub fn call(&mut self, to: AccountId, method_name: String, args: String, read_accounts: Vec<AccountId>) {
+    pub fn call(&mut self, to: AccountId, method_name: String, args: String, read_accounts: Vec<(AccountId, Vec<String>)>) {    //read_account:  account, fields
+        assert!(get_root_id(&to) == get_root_id(&env::current_account_id()), "not allowed");
         let sender_id = get_predecessor_id();
-        let mut final_args = HashMap::new();
-        final_args.insert("args".to_string(), args);
-        final_args.insert("sender_id".to_string(), sender_id.to_string());
         let mut accounts = HashMap::new();
-        accounts.insert(sender_id.to_string(), json!(get_account(&sender_id).data).to_string());
-        for account_id in read_accounts {
-            accounts.insert(account_id.to_string(), json!(get_account(&account_id).data).to_string());
+        for (account_id, fields)in read_accounts {
+            let account = get_account(&account_id);
+            let mut data: HashMap<String, String> = account.get_data(&to.to_string()).unwrap_or_default();
+            for field in fields {
+                match account.get_data::<String>(&field) {
+                    Some(v) => { data.insert(field, v); }, 
+                    None => continue
+                }
+            }
+            accounts.insert(account_id, json!(data).to_string());
         }
-        final_args.insert("accounts".to_string(), json!(accounts).to_string());
-        Promise::new(to).function_call(method_name, json!(final_args).to_string().into_bytes(), env::attached_deposit(), env::prepaid_gas() / 3).then(
-            Community::ext(env::current_account_id()).on_call(sender_id)
+        Promise::new(to).function_call(method_name, json!({
+            "args": args,
+            "sender_id": sender_id,
+            "accounts": accounts
+        }).to_string().into_bytes(), env::attached_deposit(), env::prepaid_gas() / 3).then(
+            Community::ext(env::current_account_id()).on_call(sender_id, env::attached_deposit().into())
         );
     }
 
     #[private]
-    pub fn on_call(&mut self, sender_id: AccountId) {
+    pub fn on_call(&mut self, sender_id: AccountId, amount: U128) {
+        
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
-            PromiseResult::Successful(v) => {
-                let instructions: Vec<Instruction> = BorshDeserialize::deserialize(&mut v.as_slice()).unwrap();
-                self.internal_execute_instructions(sender_id, instructions);
+            PromiseResult::Successful(instructions) => {
+                let initial_storage_usage = env::storage_usage();
+                let instructions = serde_json::from_slice(&instructions).unwrap();
+                self.internal_execute_instructions(instructions);
+                set_storage_usage(initial_storage_usage, None);
                 PromiseOrValue::Value(())
             },
             PromiseResult::Failed => {
+                Promise::new(sender_id).transfer(amount.0);
                 PromiseOrValue::Value(())
-            },
+            }
         };
     }
+
+
 
     // pub fn decode(&mut self, id: String, public_key: String, action: ActionCall, sign: String, timestamp: U64) -> Option<String> {
     //     Promise::new(env::signer_account_id()).function_call("on_callback".to_string(), json!({}).to_string().into_bytes(), 0, env::prepaid_gas() / 3);
@@ -440,9 +504,9 @@ impl Community {
 mod tests {
     use std::{collections::HashMap, str::FromStr};
 
-    use near_sdk::{base64, serde_json::{self, json}, borsh::{BorshDeserialize, BorshSerialize}, AccountId, env, json_types::{U64, U128}, log};
+    use near_sdk::{base64, serde_json::{self, json}, borsh::{BorshDeserialize, BorshSerialize}, AccountId, env, json_types::{U64, U128}, log, bs58};
     use uint::hex;
-    use crate::{Community, OldCommunity, utils::{from_rpc_sig}, proposal::ActionCall, account::{Access, SignCondition, Condition, Account}};
+    use crate::{Community, OldCommunity, utils::{from_rpc_sig}, proposal::ActionCall, account::{Access, SignCondition, Condition, Account}, drip::U256};
 
 
     #[test]
@@ -519,6 +583,16 @@ mod tests {
         let mut account = Account::new(&AccountId::from_str("bhc13.testnet").unwrap());
         let pass = account.set_condition(&access, Some(options));
         println!("{:?}", pass)
+    }
+
+    #[test]
+    pub fn test_hashing() {
+        let hash = bs58::decode("QmZVcKc16Xuyv8SfWfPaULGZDaxxvBaxUiAa5rLQQz8Eg3").into_vec().unwrap();
+        let hash = hex::encode(hash);
+        // let hash = env::keccak256(&message);
+        
+        // let hash = U256::from_big_endian(&hash);
+        println!("{:?}", hash)
     }
 
 }

@@ -74,7 +74,7 @@ impl Drip {
                     let account_royalty = (account_royalty / U256::from(100 as u128)).as_u128();
                     let mut account = get_account(&account_id);
                     account.increase_drip(account_royalty);
-                    set_account(&account_id, &account);
+                    set_account(&account);
                     drip_items.push((account_id, key.clone() + ":royalty", account_royalty.into()));
                 }
             }
@@ -84,7 +84,7 @@ impl Drip {
         let drip = (drip / U256::from(100 as u128)).as_u128();
         account.increase_drip(drip);
         self.cum_active_drip(drip);
-        set_account(&account_id, &account);
+        set_account(&account);
         drip_items.push((account_id.clone(), key, drip.into()));
         drip_items
     }
@@ -106,7 +106,7 @@ impl Drip {
         if active_drip {
             self.cum_active_drip(drip);
         }
-        set_account(&account_id, &account);
+        set_account(&account);
         let mut drip_items: Vec<(AccountId, String, U128)> = Vec::new();
         drip_items.push((account_id.clone(), key, drip.into()));
         drip_items
@@ -141,7 +141,7 @@ impl Drip {
         let mut account = get_account(&account_id);
         per = account.get_account_decay() * per / 100;
         account.increase_content_count();
-        set_account(&account_id, &account);
+        set_account(&account);
         
         let items = self.set_drip(key, None, &account_id, per); 
         [drip_items, items].concat()
@@ -212,7 +212,7 @@ impl Drip {
         from_account.decrease_drip(amount);
         self.accounts.insert(&from, &from_account);
         to_account.increase_drip(amount);
-        set_account(&to, &to_account);
+        set_account(&to_account);
         vec![(to, "gather".to_string(), amount.into())]
     }
     
@@ -229,9 +229,10 @@ impl Drip {
             Some(pending) => {
                 let amount = resolve_pending(pending);
                 remove(&id);
+                self.set_custom_drip(reason.clone(), &account_id, amount, true);
                 vec![(account_id, reason, amount.into())]
             },
-            None => vec![]
+            None => panic!("not found")
         }
     } 
 
@@ -267,7 +268,7 @@ impl Drip {
 fn resolve_pending(pending: PendingDrip) -> u128 {
     match pending {
         PendingDrip::Draw(items) => {
-            let r = usize::from_be_bytes(env::random_seed()[0..16].try_into().unwrap());
+            let r = u128::from_be_bytes(env::random_seed()[0..16].try_into().unwrap()) as usize;
             let mut v = items[r % items.len()] as u128;
             v = v * 1000000000000000000000000;
             v
@@ -277,13 +278,22 @@ fn resolve_pending(pending: PendingDrip) -> u128 {
 
 
 mod test {
-    use std::{collections::HashMap, str::FromStr, hash::Hash};
+    use std::{collections::HashMap, str::FromStr, hash::Hash, convert::TryInto};
 
     use near_sdk::{json_types::U128, AccountId, serde_json::json, serde_json, env};
 
     use crate::account::{self, Account};
 
-    use super::{U256, get_map_value, Drip};
+    use super::{U256, get_map_value, Drip, PendingDrip, resolve_pending};
+
+    #[test]
+    pub fn test_resolve_pending() {
+        let pending = PendingDrip::Draw(vec![10,11,12,13,14,15,20]);
+        let res = resolve_pending(pending);
+        println!("{:?}", res);
+        let r = u128::from_be_bytes(env::random_seed()[16..32].try_into().unwrap()) as usize;
+        println!("{:?}", r)
+    }
 
 
     #[test]

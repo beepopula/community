@@ -46,7 +46,7 @@ impl Community {
             PromiseResult::Failed => {
                 let mut account = get_account(&account_id).registered();
                 account.increase_balance(asset, amount.0);
-                set_account(&account_id, &account);
+                set_account(&account);
                 PromiseOrValue::Value(())
             },
         };
@@ -62,13 +62,13 @@ impl FtReceiver for Community {
             MsgInput::Deposit => {
                 let mut account = get_account(&sender_id);
                 account.increase_balance(AssetKey::FT(get_predecessor_id()), amount.0);
-                set_account(&sender_id, &account);
+                set_account(&account);
                 PromiseOrValue::Value(0.into())
             },
             MsgInput::Donate => {
                 let mut account = get_account(&env::current_account_id()).registered();
                 account.increase_balance(AssetKey::FT(get_predecessor_id()), amount.0);
-                set_account(&env::current_account_id(), &account);
+                set_account(&account);
                 PromiseOrValue::Value(0.into())
             },
             _ => {PromiseOrValue::Value(amount)}
@@ -123,7 +123,7 @@ impl NtftReceiver for Community {
                 PromiseOrValue::Value(0.into())
             }
         };
-        set_account(&owner_id, &account);
+        set_account(&account);
         promise
     }
 

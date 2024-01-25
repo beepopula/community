@@ -40,21 +40,6 @@ impl Community {
         Promise::new(env::current_account_id()).delete_account(sender);
     }
 
-    pub fn get_access_limit(&self) -> AccessLimit {
-        self.access.clone()
-    }
-
-    #[payable]
-    pub fn set_access_limit(&mut self, access: AccessLimit) {
-        assert_one_yocto();
-        let sender = get_predecessor_id();
-        assert!(sender == self.owner_id || 
-            get_parent_contract_id(env::current_account_id()) == get_predecessor_id() ||
-            env::current_account_id() == get_predecessor_id()
-        , "owner only");
-        self.access = access;
-    }
-
     #[private]  //TODO: open it?
     pub fn distribute(&mut self, list: Vec<(AccountId, AssetKey, U128)>) {
         let mut community = get_account(&env::current_account_id()).registered();
@@ -76,13 +61,28 @@ impl Community {
         }
         self.accounts.insert(&env::current_account_id(), &community);
     }
+
+    // pub fn instructions(&mut self) {
+    //     assert!(get_root_id(&env::current_account_id()) == get_root_id(&get_predecessor_id()), "not allowed");
+    //     match env::promise_result(0) {
+    //         PromiseResult::NotReady => unreachable!(),
+    //         PromiseResult::Successful(v) => {
+    //             let instructions: Vec<Instruction> = BorshDeserialize::deserialize(&mut v.as_slice()).unwrap();
+    //             self.internal_execute_instructions(instructions);
+    //             PromiseOrValue::Value(())
+    //         },
+    //         PromiseResult::Failed => {
+    //             PromiseOrValue::Value(())
+    //         },
+    //     };
+    // }
 }
 
 #[no_mangle]
 pub extern "C" fn upgrade() {
     env::setup_panic_hook();
     let parent_contract_id = get_parent_contract_id(env::current_account_id());
-    let root_contract_id = get_root_id(env::current_account_id());
+    let root_contract_id = get_root_id(&env::current_account_id());
     let owner_id = env::state_read::<Community>().unwrap().owner_id;
     assert!(parent_contract_id == get_predecessor_id(), "contract's parent only");
     assert!(root_contract_id == env::signer_account_id() || owner_id == env::signer_account_id(), "not owner");

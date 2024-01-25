@@ -470,7 +470,7 @@ impl Community {
                 if let Some(mut access) = option.clone() {
                     let mut account = get_account(account_id);
                     if account.check_condition(&access) || account.set_condition(&access, None) {
-                        set_account(account_id, &account);
+                        set_account(&account);
                         return Some(true)
                     } 
                     return None
@@ -481,7 +481,7 @@ impl Community {
                 if let Some(mut access) = option.clone() {
                     let mut account = get_account(account_id);
                     if !account.check_condition(&access) && !account.set_condition(&access, None) {
-                        set_account(account_id, &account);
+                        set_account(&account);
                         return Some(false)
                     }
                     return None

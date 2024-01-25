@@ -167,7 +167,7 @@ impl Proposal {
                     _ => amount,
                 };
                 account.decrease_balance(asset.clone(), amount);
-                set_account(account_id, &account);
+                set_account(&account);
                 amount
             }
             None => 1,
@@ -211,7 +211,7 @@ impl Proposal {
                     },
                     _ => account.increase_balance(asset.clone(), amount.0)
                 }
-                set_account(account_id, &account);
+                set_account(&account);
             },
             None => ()
         }
@@ -277,7 +277,7 @@ impl Proposal {
                 match &args.asset {
                     AssetKey::FT(token_id) => {
                         community.decrease_balance(args.asset.clone(), args.amount.0);
-                        set_account(&env::current_account_id(), &community);
+                        set_account(&community);
                         if token_id.to_string() == "near" {
                             Promise::new(args.receiver_id.clone()).transfer(args.amount.0).into()
                         } else {

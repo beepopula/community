@@ -9,7 +9,6 @@ const ONE_DAY_TIMESTAMP: &str = "one_day_timestamp";
 const CONTENT_COUNT: &str = "content_count";
 const TOTAL_CONTENT_COUNT: &str = "total_content_count";
 const PERMANENT: &str = "permanent";
-const EVENT: &str = "event";
 
 #[derive(BorshDeserialize, BorshSerialize)]
 #[derive(Serialize, Deserialize)]
@@ -23,7 +22,7 @@ pub enum AssetKey {
 
 
 fn get_account_decay(count: u64) -> u32 {
-    if count <= 10 {
+    if count < 20 {
         return 100
     } 
     40
@@ -133,6 +132,12 @@ impl Account {
         this
     }
 
+    pub fn from_data(data: HashMap<String, String>) -> Self {
+        Account {
+            data
+        }
+    }
+
     pub fn get_data<T>(&self, key: &str) -> Option<T> 
     where T: for<'a> Deserialize<'a>
     {
@@ -144,6 +149,12 @@ impl Account {
             Ok(res) => Some(res),
             Err(_) => None
         }
+    }
+
+    pub fn set_data<T>(&mut self, key: &str, value: T) 
+    where T: Serialize
+    {
+        self.data.insert(key.to_string(), json!(value).to_string());
     }
 
     pub fn account_id(&self) -> AccountId {
@@ -188,32 +199,51 @@ impl Account {
         registered
     }
 
-    pub fn is_permanent(&self) -> bool {
-        self.get_data::<bool>(PERMANENT).unwrap_or(false)
-    }
-
     pub fn set_registered(&mut self, registered: bool) {
         self.data.insert(REGISTERED.to_string(), json!(registered).to_string());
     }
 
-    pub fn set_permanent(&mut self, is_permanent: bool) {
-        self.data.insert(PERMANENT.to_string(), json!(is_permanent).to_string());
-    }
-
-    pub fn is_expired(&self, access: &Access) -> bool {
-        let key = json!(access.condition).to_string();
-        match access.expire_duration {
-            Some(expire_duration) => {
-                let timestamp = self.get_data::<U64>(&key).unwrap_or(U64::from(0));
-                env::block_timestamp() > timestamp.0 + expire_duration.0
-            },
-            None => false
+    pub fn is_permanent(&self) -> bool {  // deprecated for new communities
+        match self.get_data::<bool>(PERMANENT) {
+            Some(v) => v,
+            None => !self.is_expired(None)
         }
     }
 
-    pub fn set_timestamp(&mut self, access: &Access, timestamp: U64) {
-        let key = json!(access.condition).to_string();
-        self.data.insert(key, json!(timestamp).to_string());
+    // pub fn set_permanent(&mut self, is_permanent: bool) {
+    //     self.data.insert(PERMANENT.to_string(), json!(is_permanent).to_string());
+    // }
+
+    pub fn is_expired(&self, access: Option<&Access>) -> bool {
+        match access {
+            Some(access) => {
+                let key = json!(access.condition).to_string();
+                match access.expire_duration {
+                    Some(expire_duration) => {
+                        let timestamp = self.get_data::<U64>(&key).unwrap_or(U64::from(0));
+                        env::block_timestamp() > timestamp.0 + expire_duration.0
+                    },
+                    None => false
+                }
+            },
+            None => {
+                let timestamp = self.get_data::<U64>(PERMANENT).unwrap_or(U64::from(0));
+                env::block_timestamp() > timestamp.0
+            }
+        }
+    }
+
+    pub fn set_timestamp(&mut self, access: Option<&Access>, timestamp: U64) {
+        match access {
+            Some(access) => {
+                let key = json!(access.condition).to_string();
+                self.data.insert(key, json!(timestamp).to_string());
+            },
+            None => {
+                self.data.insert(PERMANENT.to_string(), json!(timestamp).to_string());
+            }
+        }
+        
     }
 
     pub fn get_drip(&self) -> u128 {
@@ -306,7 +336,7 @@ impl Account {
     } 
 
     pub fn check_condition(&self, access: &Access) -> bool {
-        if !self.is_expired(access) {
+        if !self.is_expired(Some(access)) || !self.is_expired(None) {
             return true
         }
         match &access.condition {
@@ -349,7 +379,7 @@ impl Account {
                     }
                     if let Some(expire_duration) = access.expire_duration{
                         let timestamp = U64::from(env::block_timestamp());
-                        self.set_timestamp(access, timestamp);
+                        self.set_timestamp(Some(access), timestamp);
                     }
                     true
                 } else {
@@ -382,7 +412,7 @@ impl Account {
 
                 if let Some(expire_duration) = access.expire_duration{
                     assert!(timestamp.0 + expire_duration.0 >= env::block_timestamp(), "signature expired");
-                    self.set_timestamp(access, timestamp);
+                    self.set_timestamp(Some(access), timestamp);
                 }
                 self.set_signature(sign_condition.public_key.clone(), sign.clone(), timestamp);
                 true

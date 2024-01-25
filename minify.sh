@@ -8,4 +8,4 @@ wasm-gc temp-$w
 wasm-strip temp-$w
 wasm-opt -Oz temp-$w --output minified.wasm
 rm temp-$w
-echo $w `stat -c "%s" $p` "bytes ->" `stat -c "%s" minified-$w` "bytes, see minified-$w"
+echo $w `stat -c "%s" $p` "bytes ->" `stat -c "%s" minified.wasm` "bytes, see minified.wasm"

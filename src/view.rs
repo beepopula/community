@@ -39,6 +39,10 @@ pub struct ProposalOutput {
 #[near_bindgen]
 impl Community {
 
+    pub fn get_access_limit(&self) -> AccessLimit {
+        self.access.clone()
+    }
+
     pub fn get_drip(&self, account_id: AccountId) -> U128 {
         self.drip.get_drip(account_id)
     }

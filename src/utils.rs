@@ -53,7 +53,7 @@ pub(crate) fn get_parent_contract_id(contract_id: AccountId) -> AccountId {
     AccountId::try_from(parent_id).unwrap()
 }
 
-pub(crate) fn get_root_id(contract_id: AccountId) -> AccountId {
+pub(crate) fn get_root_id(contract_id: &AccountId) -> AccountId {
     let contract_id = contract_id.to_string();
     //let index = contract_id.find('.').unwrap();
     let arr: Vec<String> = contract_id.split('.').map(|v| v.to_string()).collect();
@@ -162,9 +162,10 @@ pub(crate) fn get_account(account_id: &AccountId) -> Account {
     }
 }
 
-pub(crate) fn set_account(account_id: &AccountId, account: &Account) {
+pub(crate) fn set_account(account: &Account) {
+    let account_id = account.account_id();
     let mut accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
-    accounts.insert(account_id, account);
+    accounts.insert(&account_id, account);
 }
 
 pub(crate) fn get_arg<T>(key: &str) -> Option<T> 
