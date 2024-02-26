@@ -150,8 +150,8 @@ impl Community {
 
     pub fn set_global_role(&mut self, permissions: Vec<Permission>, options: Vec<(Relationship, Option<Access>)>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = get_predecessor_id();
         assert!(self.can_execute_action(None, None, Permission::SetRole(None)), "not allowed");
+        self.role_management.global_role.clear();
         for i in 0..permissions.len() {
             self.role_management.global_role.insert(permissions[i].clone(), options[i].clone());
         }
@@ -211,6 +211,7 @@ impl Community {
         }
         
         if let Some(permissions) = permissions {
+            role.permissions.clear();
             for permission in permissions {
                 role.permissions.insert(permission);
             }

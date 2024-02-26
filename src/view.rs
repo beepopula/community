@@ -52,7 +52,7 @@ impl Community {
     }
 
     pub fn get_account(&self, account_id: AccountId) -> HashMap<String, String> {
-        get_account_safe(&account_id).data
+        get_account_safe(&account_id).data()
     }
 
     pub fn get_content_decay(&self, hierarchies: Vec<Hierarchy>) -> u32 {

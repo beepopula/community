@@ -152,9 +152,9 @@ pub(crate) fn get_account(account_id: &AccountId) -> Account {
     let accounts: LookupMap<AccountId, Account> = LookupMap::new(StorageKey::Account);
     match accounts.get(account_id) {
         Some(mut v) => {
-            v.data.insert("account_id".to_string(), account_id.to_string());
+            v.set("account_id", &account_id.to_string());
             if let AccessLimit::Free = get_access_limit() {
-                v.data.insert("registered".to_string(), json!(true).to_string());
+                v.set_registered(true)
             }
             v
         },

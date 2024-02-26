@@ -31,7 +31,7 @@ fn get_account_decay(count: u64) -> u32 {
 #[derive(BorshDeserialize, BorshSerialize, Clone)]
 #[derive(Debug)]
 pub struct Account {
-    pub data: HashMap<String, String>,
+    data: HashMap<String, String>,
     // one_day_timestamp: u64,   //update after 24h
     // content_count: u64
 }
@@ -132,10 +132,20 @@ impl Account {
         this
     }
 
+    pub fn set(&mut self, key: &str, value: &str) {
+        self.data.insert(key.to_string(), value.to_string());
+    }
+
     pub fn from_data(data: HashMap<String, String>) -> Self {
         Account {
             data
         }
+    }
+
+    pub fn data(&self) -> HashMap<String, String> {
+        let mut data = self.data.clone();
+        data.insert(REGISTERED.to_string(), json!(self.is_registered()).to_string());
+        data
     }
 
     pub fn get_data<T>(&self, key: &str) -> Option<T> 

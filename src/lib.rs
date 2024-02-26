@@ -11,7 +11,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::{Base58CryptoHash, U128, U64};
 use near_sdk::serde::{Serialize, Deserialize};
 use near_sdk::serde_json::{json, self, to_string, Value};
-use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue, sys, PromiseResult};
+use near_sdk::{near_bindgen, AccountId, log, bs58, PanicOnDefault, Promise, BlockHeight, CryptoHash, assert_one_yocto, BorshStorageKey, env, PromiseOrValue, sys, PromiseResult, Gas};
 use near_sdk::collections::{LookupMap, UnorderedMap, Vector, LazyOption, UnorderedSet};
 use drip::{Drip, PendingDrip};
 use proposal::{Proposal, FunctionCall, ActionCall};
@@ -277,10 +277,10 @@ impl Community {
     }
 
     #[payable]
-    pub fn deposit(&mut self) {
+    pub fn deposit(&mut self, account_id: Option<AccountId>) {
         let initial_storage_usage = env::storage_usage();
-        let sender_id = get_predecessor_id();
-        let mut account = get_account(&sender_id).registered();
+        let sender_id = account_id.unwrap_or(get_predecessor_id());
+        let mut account = get_account(&sender_id);
         account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), env::attached_deposit());
         self.accounts.insert(&sender_id, &account);
         set_storage_usage(initial_storage_usage, None);
@@ -399,10 +399,16 @@ impl Community {
         
     // }
 
-    #[payable]
-    pub fn call(&mut self, to: AccountId, method_name: String, args: String, read_accounts: Vec<(AccountId, Vec<String>)>) {    //read_account:  account, fields
+    pub fn call(&mut self, to: AccountId, method_name: String, args: String, read_accounts: Vec<(AccountId, Vec<String>)>, permissions: Vec<Permission>, deposit: Option<U128>, gas: Option<U64>) {    //read_account:  account, fields
         assert!(get_root_id(&to) == get_root_id(&env::current_account_id()), "not allowed");
         let sender_id = get_predecessor_id();
+        let mut permitteds = HashSet::new();
+        for permission in permissions.clone() {
+            if self.can_execute_action(None, None, permission.clone()) {
+                permitteds.insert(permission);
+            }
+        }
+        
         let mut accounts = HashMap::new();
         for (account_id, fields)in read_accounts {
             let account = get_account(&account_id);
@@ -415,17 +421,32 @@ impl Community {
             }
             accounts.insert(account_id, json!(data).to_string());
         }
+        let deposit = match deposit {
+            Some(v) => {
+                let mut account = get_account(&env::signer_account_id());
+                account.decrease_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), v.0);
+                set_account(&account);
+                v.0
+            },
+            None => 0
+        };
+        let gas = match gas {
+            Some(v) => Gas::from(v.0),
+            None => env::prepaid_gas() / 3
+        };
+        
         Promise::new(to).function_call(method_name, json!({
             "args": args,
             "sender_id": sender_id,
-            "accounts": accounts
-        }).to_string().into_bytes(), env::attached_deposit(), env::prepaid_gas() / 3).then(
-            Community::ext(env::current_account_id()).on_call(sender_id, env::attached_deposit().into())
+            "accounts": accounts,
+            "permissions": permitteds
+        }).to_string().into_bytes(), deposit, gas).then(
+            Community::ext(env::current_account_id()).on_call(deposit.into())
         );
     }
 
     #[private]
-    pub fn on_call(&mut self, sender_id: AccountId, amount: U128) {
+    pub fn on_call(&mut self, amount: U128) {
         
         match env::promise_result(0) {
             PromiseResult::NotReady => unreachable!(),
@@ -437,7 +458,9 @@ impl Community {
                 PromiseOrValue::Value(())
             },
             PromiseResult::Failed => {
-                Promise::new(sender_id).transfer(amount.0);
+                let mut account = get_account(&env::signer_account_id());
+                account.increase_balance(AssetKey::FT(AccountId::from_str("near").unwrap()), amount.0);
+                set_account(&account);
                 PromiseOrValue::Value(())
             }
         };

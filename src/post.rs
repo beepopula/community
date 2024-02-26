@@ -61,7 +61,13 @@ impl Community {
         let initial_storage_usage = env::storage_usage();
         let sender_id = get_predecessor_id();
 
-        assert!(self.can_execute_action(None, None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+        if let Some(options) = options.clone() {
+            if options.contains_key("access") {
+                assert!(self.can_execute_action(None, None, Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
+            } else {
+                assert!(self.can_execute_action(None, None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+            }
+        } 
 
         assert!(hierarchies.len() < MAX_LEVEL, "error");
 
@@ -108,13 +114,13 @@ impl Community {
         if !exist {
             drips = self.drip.set_like_drip(hierarchies.clone(), sender_id);
         }
+        set_storage_usage(initial_storage_usage, None);
         Event::log_like_content(
             hierarchies,
             Some(json!({
                 "drips": drips
             }).to_string())
         );
-        set_storage_usage(initial_storage_usage, None);
     }
 
     pub fn unlike(&mut self, hierarchies: Vec<Hierarchy>) {
@@ -142,8 +148,8 @@ impl Community {
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         let hierarchy_hash = CryptoHash::from(hierarchy_hash).to_vec();
         remove(&hierarchy_hash);
-        Event::log_del_content(hierarchies, None);
         set_storage_usage(initial_storage_usage, None);
+        Event::log_del_content(hierarchies, None);
     }
 
     pub fn report_confirm(&mut self, hierarchies: Vec<Hierarchy>, report: Report) {
@@ -167,13 +173,7 @@ impl Community {
                         continue
                     }
                     drips = self.drip.set_report_drip(hierarchies.clone(), account_id.clone());
-                }
-                Event::log_del_content(
-                    hierarchies,
-                    Some(json!({
-                        "drips": drips
-                    }).to_string())
-                );
+                } 
             },
             _ => {}
         }
@@ -191,8 +191,13 @@ impl Community {
                 }
             }
         }
+        Event::log_del_content(
+            hierarchies,
+            Some(json!({
+                "drips": drips
+            }).to_string())
+        );
         set_storage_usage(initial_storage_usage, None);
-        
     }
 
     pub fn del_others_content(&mut self, hierarchies: Vec<Hierarchy>) {
@@ -208,8 +213,8 @@ impl Community {
         };
         let hierarchy_hash = Base58CryptoHash::try_from(hierarchy_hash).unwrap();
         remove(&CryptoHash::from(hierarchy_hash).to_vec());
-        Event::log_del_content(hierarchies, None);
         set_storage_usage(initial_storage_usage, None);
+        Event::log_del_content(hierarchies, None);
     }
 }
 
@@ -222,29 +227,23 @@ pub extern "C" fn add_long_content() {
     let args_length = u32::from_le_bytes(raw_input[0..4].try_into().unwrap());
     let args: InputArgs = serde_json::from_slice(&raw_input[4..(args_length as usize + 4)]).unwrap();
     let hierarchies = args.hierarchies.clone();
+    assert!(hierarchies.len() == 0, "post only");
     let options = args.options.clone();
     let sender_id = get_predecessor_id();
     let mut contract: Community = env::state_read().unwrap();
-    assert!(contract.can_execute_action(None, None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
-
-    assert!(hierarchies.len() < MAX_LEVEL, "error");
+    if let Some(options) = options.clone() {
+        if options.contains_key("access") {
+            assert!(contract.can_execute_action(None, None, Permission::AddEncryptContent(hierarchies.len() as u8)), "not allowed");
+        } else {
+            assert!(contract.can_execute_action(None, None, Permission::AddContent(hierarchies.len() as u8)), "not allowed");
+        }
+    } 
 
     let hash_prefix = get_content_hash(hierarchies.clone(), None, false).expect("content not found");
     let target_hash = set_content(json!(args.clone()).to_string(), sender_id.clone(), hash_prefix.clone(), options.clone(), None);
 
-    let mut prev_content_count = None;
-    if hierarchies.len() > 0 {
-        let prev_hash = CryptoHash::from(Base58CryptoHash::try_from(hash_prefix.clone()).unwrap()).to_vec();
-        let mut val = get::<u8>(&prev_hash).unwrap();
-        prev_content_count = Some(val.clone());
-        val += 1;
-        if val > 3 {
-            val = 3;
-        }
-        set(&prev_hash, val)
-    }
-
-    let drips = contract.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), prev_content_count);
+    let drips = contract.drip.set_content_drip(hierarchies.clone(), sender_id.clone(), None);
+    set_storage_usage(initial_storage_usage, None);
     Event::log_add_content(
         "".to_string(), 
         [hierarchies, vec![Hierarchy { 
@@ -256,8 +255,7 @@ pub extern "C" fn add_long_content() {
             "drips": drips
         }).to_string())
     );
-    set_storage_usage(initial_storage_usage, None);
-    // String::from(&target_hash)
+    env::value_return(&CryptoHash::from(target_hash).to_vec());
 }
 
 
