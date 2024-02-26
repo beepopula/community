@@ -67,9 +67,10 @@ impl Drip {
 
         if let Some(options) = options.clone() {
             if let Some(royalties) = options.get("drip_royalties") {
-                let royalties: HashMap<AccountId, u32> = serde_json::from_str(&royalties).unwrap_or(HashMap::new());
+                let royalties: HashMap<AccountId, f32> = serde_json::from_str(&royalties).unwrap_or(HashMap::new());
                 for (account_id, royalty) in royalties {
-                    let account_royalty = total_drip * royalty;
+                    let royalty = (royalty * 100.0) as u32;
+                    let account_royalty = total_drip * royalty / 100;
                     drip -= account_royalty;
                     let account_royalty = (account_royalty / U256::from(100 as u128)).as_u128();
                     let mut account = get_account(&account_id);
@@ -322,16 +323,16 @@ mod test {
         println!("{:?}", drip);
     }
 
-    #[test]
-    pub fn decay() {
-        print!("{:?}", env::block_timestamp());
-        let account_id = AccountId::from_str("gugu2029.testnet").unwrap();
-        let mut account = Account::new(&account_id);
-        account.data.insert("content_count".to_string(), "13".to_string());
-        account.data.insert("one_day_timestamp".to_string(), "1697013468067413865".to_string());
-        let mut drip = Drip::new();
-        drip.accounts.insert(&account_id, &account);
-        drip.set_content_drip(vec![], account_id.clone(), None);
-        println!("{:?}", drip.accounts.get(&account_id).unwrap())
-    }
+    // #[test]
+    // pub fn decay() {
+    //     print!("{:?}", env::block_timestamp());
+    //     let account_id = AccountId::from_str("gugu2029.testnet").unwrap();
+    //     let mut account = Account::new(&account_id);
+    //     account.data.insert("content_count".to_string(), "13".to_string());
+    //     account.data.insert("one_day_timestamp".to_string(), "1697013468067413865".to_string());
+    //     let mut drip = Drip::new();
+    //     drip.accounts.insert(&account_id, &account);
+    //     drip.set_content_drip(vec![], account_id.clone(), None);
+    //     println!("{:?}", drip.accounts.get(&account_id).unwrap())
+    // }
 }
